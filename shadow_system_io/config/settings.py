@@ -11,11 +11,11 @@ class Settings:
     API_HASH = os.getenv("API_HASH", "")
     BOT_TOKEN = os.getenv("BOT_TOKEN", "")
     
-    POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
-    POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", 5432))
-    POSTGRES_DB = os.getenv("POSTGRES_DB", "shadow_system")
-    POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
-    POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "")
+    POSTGRES_HOST = os.getenv("PGHOST", os.getenv("POSTGRES_HOST", "localhost"))
+    POSTGRES_PORT = int(os.getenv("PGPORT", os.getenv("POSTGRES_PORT", 5432)))
+    POSTGRES_DB = os.getenv("PGDATABASE", os.getenv("POSTGRES_DB", "shadow_system"))
+    POSTGRES_USER = os.getenv("PGUSER", os.getenv("POSTGRES_USER", "postgres"))
+    POSTGRES_PASSWORD = os.getenv("PGPASSWORD", os.getenv("POSTGRES_PASSWORD", ""))
     
     REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
