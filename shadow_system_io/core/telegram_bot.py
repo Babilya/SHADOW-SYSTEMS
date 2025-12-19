@@ -35,24 +35,21 @@ class TelegramBotManager:
         user = await get_user(user_id)
         role = user.get("role") if user else "manager"
         
-        welcome_text = f"""
-🎯 **SHADOW SYSTEM iO 2.0**
+        welcome_text = f"""🎯 <b>SHADOW SYSTEM iO 2.0</b>
 Привіт, {username}! 👋
 
-Ваша роль: **{role.upper()}**
+Ваша роль: <b>{role.upper() if role else 'MANAGER'}</b>
 
-Виберіть дію:
-"""
+Виберіть дію:"""
         
-        keyboard = self._get_main_menu_keyboard(role)
-        await update.message.reply_text(welcome_text, reply_markup=keyboard, parse_mode="Markdown")
+        keyboard = self._get_main_menu_keyboard(role or "manager")
+        await update.message.reply_text(welcome_text, reply_markup=keyboard, parse_mode="HTML")
         
         logger.info(f"✅ User {user_id} ({username}) logged in as {role}")
     
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /help command"""
-        help_text = """
-📚 **Доступні команди:**
+        help_text = """📚 <b>Доступні команди:</b>
 
 /start - Головне меню
 /help - Ця довідка
@@ -62,15 +59,14 @@ class TelegramBotManager:
 /stats - Статистика
 /settings - Налаштування
 
-**Для адміна:**
+<b>Для адміна:</b>
 /create_project - Створити проект
 /add_manager - Додати менеджера
 
-**Для суперадміна:**
+<b>Для суперадміна:</b>
 /users - Управління користувачами
-/system_settings - Системні налаштування
-"""
-        await update.message.reply_text(help_text, parse_mode="Markdown")
+/system_settings - Системні налаштування"""
+        await update.message.reply_text(help_text, parse_mode="HTML")
     
     async def projects_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show user's projects"""
@@ -82,11 +78,11 @@ class TelegramBotManager:
             await update.message.reply_text("❌ У вас немає проектів.")
             return
         
-        text = "📋 **Ваші проекти:**\n\n"
+        text = "📋 <b>Ваші проекти:</b>\n\n"
         for p in projects:
             text += f"• {p.get('name')} (ID: {p.get('project_id')})\n"
         
-        await update.message.reply_text(text, parse_mode="Markdown")
+        await update.message.reply_text(text, parse_mode="HTML")
     
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle button clicks"""
@@ -99,8 +95,8 @@ class TelegramBotManager:
             user = await get_user(user_id)
             role = user.get("role") if user else "manager"
             keyboard = self._get_main_menu_keyboard(role)
-            await query.edit_message_text("🎯 **Головне меню**", 
-                                         reply_markup=keyboard, parse_mode="Markdown")
+            await query.edit_message_text("🎯 <b>Головне меню</b>", 
+                                         reply_markup=keyboard, parse_mode="HTML")
         
         elif query.data == "view_projects":
             await self.projects_command(update, context)
@@ -139,20 +135,20 @@ class TelegramBotManager:
             await update.message.reply_text("❌ У проекту немає ботів.")
             return
         
-        text = "🤖 **Боти проекту:**\n\n"
+        text = "🤖 <b>Боти проекту:</b>\n\n"
         for bot in bots:
             text += f"• {bot.get('bot_id')} - {bot.get('status')}\n"
         
-        await update.message.reply_text(text, parse_mode="Markdown")
+        await update.message.reply_text(text, parse_mode="HTML")
     
     async def _show_campaigns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show campaigns"""
-        await update.message.reply_text("📊 **Функція кампаній**\n\n🚀 Створювати та управляти розсилками в розробці...", parse_mode="Markdown")
+        await update.message.reply_text("📊 <b>Функція кампаній</b>\n\n🚀 Створювати та управляти розсилками в розробці...", parse_mode="HTML")
     
     async def _show_osint_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show OSINT menu"""
         query = update.callback_query
-        text = """🔍 **OSINT Парсинг і Аналіз**
+        text = """🔍 <b>OSINT Парсинг і Аналіз</b>
         
 • Пошук чатів за ключовими словами
 • Аналіз аудиторії
@@ -160,12 +156,12 @@ class TelegramBotManager:
 • Видобування медіа
 
 Функція в розробці... 📥"""
-        await query.edit_message_text(text, parse_mode="Markdown")
+        await query.edit_message_text(text, parse_mode="HTML")
     
     async def _show_hybrid_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show hybrid management menu"""
         query = update.callback_query
-        text = """💬 **Гібридна Взаємодія (Human-in-the-Loop)**
+        text = """💬 <b>Гібридна Взаємодія (Human-in-the-Loop)</b>
         
 • Підключення менеджерів до ботів
 • Відправка повідомлень від імені ботів
@@ -173,12 +169,12 @@ class TelegramBotManager:
 • Рейтинг менеджерів
 
 Функція в розробці... 🔗"""
-        await query.edit_message_text(text, parse_mode="Markdown")
+        await query.edit_message_text(text, parse_mode="HTML")
     
     async def _show_security_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show security menu"""
         query = update.callback_query
-        text = """🛡️ **Система Безпеки**
+        text = """🛡️ <b>Система Безпеки</b>
         
 • Rate Limiting: Активен
 • Audit Logging: Активен
@@ -186,7 +182,7 @@ class TelegramBotManager:
 • User Blocking: 0 користувачів
 
 ✅ Все захищено!"""
-        await query.edit_message_text(text, parse_mode="Markdown")
+        await query.edit_message_text(text, parse_mode="HTML")
     
     async def _show_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show statistics"""
@@ -200,15 +196,14 @@ class TelegramBotManager:
         
         stats = await analytics_reporter.get_project_stats(project_id)
         
-        text = f"""📈 **Статистика проекту:**
+        text = f"""📈 <b>Статистика проекту:</b>
         
 🤖 Ботів: {stats['active_bots']}/{stats['total_bots']}
 📊 Кампаній: {stats['completed_campaigns']}/{stats['total_campaigns']}
 ✉️ Відправлено: {stats['messages_sent']}
 ✅ Доставлено: {stats['messages_delivered']}
-📈 Рівень доставки: {stats['delivery_rate']}
-"""
-        await update.message.reply_text(text, parse_mode="Markdown")
+📈 Рівень доставки: {stats['delivery_rate']}"""
+        await update.message.reply_text(text, parse_mode="HTML")
     
     def _get_main_menu_keyboard(self, role: str) -> InlineKeyboardMarkup:
         """Get main menu keyboard based on role"""
