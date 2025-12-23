@@ -3,7 +3,7 @@ from aiogram.filters import Command, StateFilter
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from keyboards.user import main_menu, subscription_menu, settings_menu
+from keyboards.user import main_menu, subscription_menu, settings_menu, main_menu_description, payment_methods
 import json
 from datetime import datetime
 
@@ -18,11 +18,11 @@ class UserStates(StatesGroup):
 @user_router.callback_query(F.data == "back_to_menu")
 async def back_to_menu(query: CallbackQuery):
     await query.answer()
-    await query.message.edit_text("📱 <b>Головне меню</b>\n\nВиберіть опцію:", reply_markup=main_menu(), parse_mode="HTML")
+    await query.message.edit_text(main_menu_description(), reply_markup=main_menu(), parse_mode="HTML")
 
 @user_router.message(Command("menu"))
 async def cmd_menu(message: Message):
-    await message.answer("📱 <b>Головне меню</b>\n\nВиберіть опцію:", reply_markup=main_menu(), parse_mode="HTML")
+    await message.answer(main_menu_description(), reply_markup=main_menu(), parse_mode="HTML")
 
 @user_router.message(Command("subscription"))
 async def cmd_subscription(message: Message):
@@ -139,5 +139,28 @@ async def show_limits(query: CallbackQuery):
 @user_router.callback_query(F.data == "back")
 async def go_back(query: CallbackQuery):
     await query.answer()
-    await query.message.edit_text("📱 <b>Головне меню</b>\n\nВиберіть опцію:", reply_markup=main_menu(), parse_mode="HTML")
+    await query.message.edit_text(main_menu_description(), reply_markup=main_menu(), parse_mode="HTML")
+
+# Обробники для нових функцій
+@user_router.callback_query(F.data == "payments_main")
+async def payments_main(query: CallbackQuery):
+    await query.answer()
+    await query.message.edit_text("💳 <b>Платежі</b>\n\n💰 Баланс: ₴5,240\n\n<b>Виберіть спосіб оплати:</b>", reply_markup=payment_methods(), parse_mode="HTML")
+
+@user_router.callback_query(F.data == "settings_main")
+async def settings_main(query: CallbackQuery):
+    await query.answer()
+    await query.message.edit_text("⚙️ <b>Налаштування</b>", reply_markup=settings_menu(), parse_mode="HTML")
+
+@user_router.callback_query(F.data == "texting")
+async def texting_callback(query: CallbackQuery):
+    await query.answer()
+    from handlers.texting import texting_menu
+    await texting_menu(query.message)
+
+@user_router.callback_query(F.data == "help")
+async def help_callback(query: CallbackQuery):
+    await query.answer()
+    from handlers.help import help_menu
+    await help_menu(query.message)
 

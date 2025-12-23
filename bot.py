@@ -49,21 +49,11 @@ dp.include_router(texting_router)
 @dp.message(CommandStart())
 async def command_start(message: Message):
     try:
+        from keyboards.user import main_menu_description
         user = message.from_user
         db.add_user(user.id, user.username or "Unknown", user.first_name or "")
         await message.answer(
-            f"Привіт, {user.first_name}! 👋\n\n"
-            "<b>SHADOW SYSTEM iO v2.0</b> - Повна система управління Telegram Botnet\n\n"
-            "📋 Основні команди:\n"
-            "/menu - Меню користувача\n"
-            "/botnet - Управління ботами\n"
-            "/osint - OSINT & Парсинг\n"
-            "/analytics - Аналітика\n"
-            "/team - Управління командою\n"
-            "/subscription - Підписки\n"
-            "/pay - Платежі\n"
-            "/admin - Панель адміна\n\n"
-            "Виберіть функцію:",
+            f"Привіт, {user.first_name}! 👋\n\n" + main_menu_description(),
             reply_markup=main_menu(),
             parse_mode="HTML"
         )
