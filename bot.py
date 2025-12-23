@@ -19,6 +19,9 @@ try:
     from handlers.analytics import analytics_router
     from handlers.team import team_router
     from handlers.subscriptions import subscriptions_router
+    from handlers.funnels import funnels_router
+    from handlers.help import help_router
+    from handlers.texting import texting_router
     from keyboards.user import main_menu
     from utils.db import db
     logger.info("✅ Все модулі завантажені успішно")
@@ -39,6 +42,9 @@ dp.include_router(osint_router)
 dp.include_router(analytics_router)
 dp.include_router(team_router)
 dp.include_router(subscriptions_router)
+dp.include_router(funnels_router)
+dp.include_router(help_router)
+dp.include_router(texting_router)
 
 @dp.message(CommandStart())
 async def command_start(message: Message):
@@ -64,8 +70,8 @@ async def command_start(message: Message):
     except Exception as e:
         logger.error(f"❌ /start error: {e}")
 
-@dp.message(Command("help"))
-async def command_help(message: Message):
+@dp.message(Command("start_help"))
+async def command_start_help(message: Message):
     await message.answer(
         "📋 <b>SHADOW SYSTEM iO - Довідка</b>\n\n"
         "🤖 /botnet - Управління ботнетом\n"
@@ -75,6 +81,10 @@ async def command_help(message: Message):
         "📦 /subscription - Підписки\n"
         "💳 /pay - Поповнення рахунку\n"
         "⚙️ /settings - Налаштування\n"
+        "📝 /texting - Текстові воронки\n"
+        "📚 /help - Дізнайтеся більше\n"
+        "🎯 /onboarding - Навчання новачків\n"
+        "📢 /sales - Sales воронка\n"
         "/admin - Адміністративна панель",
         parse_mode="HTML"
     )
