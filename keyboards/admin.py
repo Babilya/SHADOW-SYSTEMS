@@ -3,11 +3,23 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 def admin_menu() -> InlineKeyboardMarkup:
     """Адміністративне меню"""
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Розсилка", callback_data="broadcast")],
-        [InlineKeyboardButton(text="📊 Статистика", callback_data="stats_admin")],
-        [InlineKeyboardButton(text="👥 Користувачі", callback_data="users")],
-        [InlineKeyboardButton(text="📣 Оголошення", callback_data="announce")],
-        [InlineKeyboardButton(text="🔧 Обслуговування", callback_data="maintenance")],
+        [
+            InlineKeyboardButton(text="👥 Користувачі", callback_data="admin_users"),
+            InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")
+        ],
+        [
+            InlineKeyboardButton(text="🤖 Боти", callback_data="admin_bots"),
+            InlineKeyboardButton(text="💳 Платежі", callback_data="admin_payments")
+        ],
+        [
+            InlineKeyboardButton(text="📝 Кампанії", callback_data="admin_campaigns"),
+            InlineKeyboardButton(text="⚙️ Налаштування", callback_data="admin_settings")
+        ],
+        [
+            InlineKeyboardButton(text="📈 Аналітика", callback_data="admin_analytics"),
+            InlineKeyboardButton(text="🔐 Безпека", callback_data="admin_security")
+        ],
+        [InlineKeyboardButton(text="↩️ Назад", callback_data="back_to_menu")]
     ])
 
 def broadcast_menu() -> InlineKeyboardMarkup:

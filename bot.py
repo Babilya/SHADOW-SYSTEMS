@@ -22,8 +22,14 @@ try:
     from handlers.funnels import funnels_router
     from handlers.help import help_router
     from handlers.texting import texting_router
+    from handlers.users_handler import users_router
+    from handlers.campaigns_handler import campaigns_router
+    from handlers.payments_handler import payments_router as payments_repo_router
+    from handlers.bots_handler import bots_router
+    from handlers.osint_handler import osint_router as osint_repo_router
     from keyboards.user import main_menu
     from utils.db import db
+    from middlewares.auth import AuthMiddleware, RateLimitMiddleware
     logger.info("✅ Все модулі завантажені успішно")
 except Exception as e:
     logger.error(f"❌ Помилка при завантаженні модулів: {e}", exc_info=True)
@@ -32,6 +38,11 @@ except Exception as e:
 bot = Bot(token=BOT_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
+
+# Додання middleware
+dp.message.middleware(AuthMiddleware())
+dp.callback_query.middleware(AuthMiddleware())
+dp.message.middleware(RateLimitMiddleware(max_requests=20, time_window=60))
 
 # Реєстрація всіх роутерів
 dp.include_router(user_router)
@@ -45,6 +56,12 @@ dp.include_router(subscriptions_router)
 dp.include_router(funnels_router)
 dp.include_router(help_router)
 dp.include_router(texting_router)
+# Додання нових роутерів
+dp.include_router(users_router)
+dp.include_router(campaigns_router)
+dp.include_router(payments_repo_router)
+dp.include_router(bots_router)
+dp.include_router(osint_repo_router)
 
 @dp.message(CommandStart())
 async def command_start(message: Message):
