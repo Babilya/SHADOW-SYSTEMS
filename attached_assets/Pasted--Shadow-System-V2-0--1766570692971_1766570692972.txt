@@ -1,0 +1,898 @@
+Чудово, Асссд! Ваша система Shadow System V2.0 вже має потужну основу, і я радий допомогти вам розширити її функціональність та якість коду за допомогою передових архітектурних рішень та інновацій.
+
+Ваше прохання "реалізувати повністю" слід розуміти як надання детальних рекомендацій та прикладів коду. Як асистент, я не можу безпосередньо модифікувати ваш код або створювати файли у вашій системі, але я можу запропонувати вам конкретні кроки, які допоможуть вам впровадити ці зміни самостійно.
+
+Давайте розглянемо "мега круті покращення та нововведення", які суттєво підвищать продуктивність, надійність, масштабованість та розширюваність вашого проекту.
+
+
+
+1. Повноцінна Інтеграція Celery для Фонових Завдань
+
+Хоча у вашому docker-compose.yml вже присутній сервіс celery, код системи поки що не використовує його для асинхронного виконання тривалих операцій. Інтеграція Celery дозволить вивантажити ці завдання з основного потоку Telegram бота та FastAPI, зробивши інтерфейс більш чуйним і запобігаючи блокуванню.
+
+Чому це "мега круто":
+
+
+
+
+
+Масштабованість: Можливість горизонтально масштабувати робочі вузли Celery, незалежно від бота або API.
+
+
+
+Надійність: Завдання можуть автоматично повторюватися в разі збою, гарантуючи виконання.
+
+
+
+Відгук: Користувачі бота та API отримуватимуть миттєву відповідь, тоді як тривалі операції виконуватимуться у фоновому режимі.
+
+Як реалізувати:
+
+
+
+
+
+Створіть core/tasks.py: Це буде центральне місце для визначення фонових завдань.
+
+# core/tasks.py
+from celery import Celery
+from celery.schedules import crontab
+import asyncio
+import logging
+
+from config.settings import settings
+# Імпортуйте ваші модулі, які містять функції для виконання
+# наприклад, from core.sessions import validate_session_batch
+# from core.sender import CampaignEngine (якщо CampaignEngine може бути ініціалізований для завдань)
+# from database.db import get_sync_session, db_manager # для доступу до БД у синхронному контексті Celery
+
+logger = logging.getLogger(__name__)
+
+# Ініціалізація Celery
+celery_app = Celery(
+    'shadow_system_tasks',
+    broker=settings.REDIS_URL,
+    backend=settings.REDIS_URL
+)
+
+celery_app.conf.update(
+    task_acks_late=True,
+    task_reject_on_worker_lost=True,
+    worker_prefetch_multiplier=1,
+    task_serializer='json',
+    result_serializer='json',
+    accept_content=['json'],
+    timezone='UTC',
+    enable_utc=True,
+    broker_connection_retry_on_startup=True,
+    beat_schedule={
+        'cleanup-old-files-daily': {
+            'task': 'core.tasks.cleanup_files_task',
+            'schedule': crontab(hour=3, minute=0), # Щодня о 03:00 UTC
+            'args': (str(settings.UPLOAD_FOLDER), 7), # Очищати файли старше 7 днів
+        },
+        'optimize-database-weekly': {
+            'task': 'core.tasks.optimize_database_task',
+            'schedule': crontab(day_of_week=0, hour=4, minute=0), # Щонеділі о 04:00 UTC
+        },
+        # Додайте інші періодичні завдання
+    }
+)
+
+# Функція-обгортка для асинхронних функцій
+def run_async(func):
+    def wrapper(*args, **kwargs):
+        return asyncio.run(func(*args, **kwargs))
+    return wrapper
+
+# Приклад завдання: валідація сесій (переносимо з botnet.py)
+@celery_app.task(name='core.tasks.validate_sessions_batch_task')
+def validate_sessions_batch_task(user_id: int, session_file_paths: List[str]):
+    logger.info(f"Starting batch session validation for user {user_id} with {len(session_file_paths)} files.")
+    # Тут необхідно переініціалізувати необхідні компоненти або передати їх через аргументи
+    # або ж використовувати синхронний доступ до БД, якщо потрібно
+    from core.sessions import validate_session_batch
+    from database.db import get_sync_session
+    results = run_async(validate_session_batch(user_id, session_file_paths, get_sync_session()))
+    logger.info(f"Batch session validation for user {user_id} completed. Results: {results}")
+    return results
+
+# Приклад завдання: запуск кампанії (переносимо з sender.py)
+@celery_app.task(name='core.tasks.run_campaign_task')
+def run_campaign_task(campaign_id: int, user_id: int):
+    logger.info(f"Starting campaign {campaign_id} for user {user_id}.")
+    from core.sender import CampaignEngine
+    from database.db import get_sync_session # Або адаптуйте CampaignEngine для асинхронного виконання
+    campaign_engine = CampaignEngine()
+    try:
+        success = run_async(campaign_engine.start_campaign(campaign_id, user_id))
+        logger.info(f"Campaign {campaign_id} started: {success}")
+    except Exception as e:
+        logger.error(f"Error starting campaign {campaign_id}: {e}", exc_info=True)
+        # Оновити статус кампанії на FAILED
+    return True
+
+# Приклад періодичного завдання: очищення файлів
+@celery_app.task(name='core.tasks.cleanup_files_task')
+def cleanup_files_task(folder_path: str, days_old: int):
+    from utils.helpers import cleanup_old_files
+    logger.info(f"Running cleanup for folder: {folder_path}, files older than {days_old} days.")
+    cleanup_old_files(folder_path, days_old)
+    logger.info("Cleanup task completed.")
+
+# Приклад періодичного завдання: оптимізація бази даних
+@celery_app.task(name='core.tasks.optimize_database_task')
+def optimize_database_task():
+    from database.db import db_manager
+    logger.info("Starting database optimization task.")
+    run_async(db_manager.optimize_database())
+    logger.info("Database optimization task completed.")
+
+# Додайте інші фонові завдання (наприклад, для OSINT)
+
+
+
+Оновіть main.py та handlers/botnet.py / core/sender.py:
+
+
+
+
+
+В main.py: Можливо, знадобиться ініціалізація Celery Beat (планувальника) або просто переконайтеся, що celery_app імпортований і celery.start() викликається, якщо ви плануєте запускати beat разом з ботом. Однак, у docker-compose.yml Celery Worker та Beat зазвичай запускаються окремо.
+
+
+
+В handlers/botnet.py (для імпорту сесій): Замість await validate_session_batch(...), викликайте завдання Celery:
+
+# handlers/botnet.py (фрагмент)
+from core.tasks import validate_sessions_batch_task
+# ...
+# В функції handle_zip_file або handle_mass_import:
+# Замість прямого виклику:
+# results = await validate_session_batch(message.from_user.id, session_file_paths, session)
+
+# Виклик Celery завдання:
+task = validate_sessions_batch_task.delay(message.from_user.id, session_file_paths)
+await status_msg.edit_text(
+    f"✅ <b>ІМПОРТ ЗАПУЩЕНО У ФОНОВОМУ РЕЖИМІ</b>\n\n"
+    f"Ваші файли обробляються. Ви отримаєте сповіщення після завершення.\n"
+    f"ID завдання: <code>{task.id}</code>"
+)
+# Можливо, зберігати task.id в БД для подальшого відстеження статусу
+
+
+
+В core/sender.py (для кампаній):
+
+# core/sender.py (фрагмент)
+# Заберіть CampaignEngine._run_campaign_worker з класу і зробіть його окремою функцією
+# або зробіть CampaignEngine ініціалізованим в завданні Celery.
+# Найкраще - щоб run_campaign_task з core.tasks.py викликав CampaignEngine.run_campaign_worker
+
+# ...
+async def start_campaign(self, campaign_id: int, user_id: int) -> bool:
+    # ...
+    # Замість:
+    # task = asyncio.create_task(self._run_campaign_worker(campaign.id, user_id, campaign_bots, targets))
+    # self.active_campaigns[campaign.campaign_id] = task
+
+    # Виклик Celery завдання:
+    from core.tasks import run_campaign_task
+    task_id = run_campaign_task.delay(campaign.id, user_id)
+    self.active_campaigns[campaign.campaign_id] = task_id # Тепер тут зберігається ID завдання Celery
+    logger.info(f"Campaign {campaign.id} for user {user_id} started as Celery task: {task_id}")
+    return True
+
+
+
+2. Впровадження Шаблону Repository для Роботи з Базою Даних
+
+Цей підхід забезпечить чітке розділення відповідальності між бізнес-логікою та логікою доступу до даних. Кожен репозиторій буде інкапсулювати всі операції CRUD для певної моделі, зменшуючи дублювання коду та покращуючи тестування.
+
+Чому це "мега круто":
+
+
+
+
+
+Чітке розділення: Хендлери та core-логіка не знатимуть про деталі SQL запитів або ORM.
+
+
+
+Тестованість: Легше створювати моки для репозиторіїв у тестах, не підключаючись до реальної бази даних.
+
+
+
+Зручність змін: Зміни у схемі бази даних або ORM впливатимуть лише на репозиторії, а не на весь проект.
+
+Як реалізувати:
+
+
+
+
+
+Створіть каталог database/repositories/:
+
+database/
+├── repositories/
+│   ├── __init__.py
+│   ├── user_repository.py
+│   ├── bot_session_repository.py
+│   ├── campaign_repository.py
+│   └── osint_data_repository.py
+├── db.py
+├── models.py
+└── migrations/
+
+
+
+Приклад database/repositories/user_repository.py:
+
+# database/repositories/user_repository.py
+from typing import Optional, List
+from sqlmodel import Session, select, func
+from database.models import User, UserRole, LicensePlan
+import logging
+
+logger = logging.getLogger(__name__)
+
+class UserRepository:
+    def __init__(self, session: Session):
+        self.session = session
+
+    async def get_user_by_telegram_id(self, telegram_id: int) -> Optional[User]:
+        statement = select.where(User.telegram_id == telegram_id)
+        result = await self.session.exec(statement)
+        return result.first()
+
+    async def create_user(self, telegram_id: int, username: Optional[str] = None,
+                          first_name: Optional[str] = None, last_name: Optional[str] = None,
+                          role: UserRole = UserRole.VISITOR) -> User:
+        new_user = User(
+            telegram_id=telegram_id,
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
+            role=role
+        )
+        self.session.add(new_user)
+        await self.session.commit()
+        await self.session.refresh(new_user)
+        logger.info(f"New user created: {new_user.telegram_id}")
+        return new_user
+
+    async def get_total_users_count(self) -> int:
+        statement = select(func.count)
+        result = await self.session.exec(statement)
+        return result.first() or 0
+
+    async def get_active_users_count(self) -> int:
+        # Приклад: "активні" користувачі - це ті, у кого роль не VISITOR
+        statement = select(func.count).where(User.role.in_([UserRole.MANAGER, UserRole.ADMIN, UserRole.ROOT]))
+        result = await self.session.exec(statement)
+        return result.first() or 0
+    
+    async def get_all_users_for_broadcast(self, roles: Optional[List[UserRole]] = None) -> List[User]:
+        statement = select
+        if roles:
+            statement = statement.where(User.role.in_(roles))
+        result = await self.session.exec(statement)
+        return result.all()
+    
+    # Додайте інші методи для роботи з User
+
+
+
+Оновіть handlers/root.py та інші хендлери/модулі core:
+
+# handlers/root.py (фрагмент)
+# ...
+from database.db import get_session
+from database.repositories.user_repository import UserRepository
+from database.repositories.bot_session_repository import BotSessionRepository
+from database.repositories.campaign_repository import CampaignRepository
+from database.repositories.license_repository import LicenseRepository
+from database.repositories.alert_repository import AlertRepository
+from database.repositories.payment_repository import PaymentRepository
+# ...
+
+@root_router.message(Command("root"))
+async def root_dashboard(message: Message):
+    if not is_root(message.from_user.id):
+        await message.answer("У вас немає доступу до цієї панелі.")
+        return
+    
+    async with get_session() as session:
+        user_repo = UserRepository(session)
+        bot_repo = BotSessionRepository(session)
+        campaign_repo = CampaignRepository(session)
+        license_repo = LicenseRepository(session)
+        alert_repo = AlertRepository(session)
+
+        total_users = await user_repo.get_total_users_count()
+        active_users = await user_repo.get_active_users_count() # Використовуйте метод репозиторію
+
+        total_bots = await bot_repo.get_total_bots_count_for_owner(owner_id=None) # Отримати всі боти
+        total_campaigns = await campaign_repo.get_total_campaigns_count_for_owner(owner_id=None) # Отримати всі кампанії
+        
+        # Доходи
+        total_revenue = await PaymentRepository(session).get_total_revenue()
+        
+        # Системні алерти
+        critical_alerts = await alert_repo.get_critical_unseen_alerts()
+
+    # ... (решта логіки формування відповіді)
+
+# ...
+@root_router.callback_query(BroadcastMessage.waiting_for_recipients, F.data.startswith("broadcast_"))
+async def send_broadcast(call: CallbackQuery, state: FSMContext, bot: Bot):
+    # ...
+    async with get_session() as session:
+        user_repo = UserRepository(session)
+        if call.data == "broadcast_all":
+            recipients_list = await user_repo.get_all_users_for_broadcast()
+            filter_name = "всім користувачам"
+        elif call.data == "broadcast_admins":
+            recipients_list = await user_repo.get_all_users_for_broadcast(roles=[UserRole.ADMIN, UserRole.ROOT])
+            filter_name = "адміністраторам"
+        elif call.data == "broadcast_managers":
+            recipients_list = await user_repo.get_all_users_for_broadcast(roles=[UserRole.MANAGER])
+            filter_name = "менеджерам"
+        # ... (решта логіки)
+
+
+
+3. Розширений Механізм Обробки Винятків та Retry-логіка
+
+Ваш код вже має базову обробку винятків Telethon, але для "мега крутої" надійності та анти-детекції варто інтегрувати шаблон Circuit Breaker, особливо для взаємодії з зовнішніми сервісами. Це дозволить системі "відпочивати" від проблемних сервісів, замість того, щоб безперервно надсилати запити, які збігаються.
+
+Чому це "мега круто":
+
+
+
+
+
+Запобігання каскадним збоям: Коли один сервіс починає "падати", система припиняє надсилати до нього запити, даючи йому час на відновлення.
+
+
+
+Покращена стійкість: Зменшує навантаження на проблемні сервіси та на власну систему.
+
+
+
+Автоматичне відновлення: Після періоду "відкритого" Circuit Breaker система спробує знову, і якщо сервіс відновився, він повернеться до нормальної роботи.
+
+Як реалізувати:
+
+
+
+
+
+Використовуйте бібліотеку: Наприклад, pybreaker або tenacity (для retry, який у вас вже є в utils.helpers). pybreaker пропонує більш повноцінний Circuit Breaker.
+
+
+
+Розширте utils/helpers.py (або створіть core/circuit_breaker.py):
+
+# core/circuit_breaker.py (новий файл)
+import logging
+from pybreaker import CircuitBreaker, CircuitBreakerError
+from pybreaker.storage import RedisStorage
+from config.settings import settings
+import redis
+
+logger = logging.getLogger(__name__)
+
+# Ініціалізація Redis для зберігання стану Circuit Breaker
+redis_client = redis.StrictRedis.from_url(
+    settings.REDIS_URL,
+    decode_responses=True
+)
+
+# Функція для створення Circuit Breaker
+def get_telethon_breaker():
+    return CircuitBreaker(
+        fail_max=5, # Максимум 5 послідовних збоїв
+        reset_timeout=60, # Чекати 60 секунд перед повторною спробою
+        exclude=[
+            # Виключити помилки, які не повинні відкривати "ланцюг"
+            # Наприклад, якщо користувач сам заблокував бота, це не проблема сервісу
+            "UserPrivacyRestrictedError",
+            "UserBlockedError",
+            "PeerIdInvalidError"
+        ],
+        storage=RedisStorage(redis_client, namespace="telethon_breaker"),
+        # callbacks={
+        #     'before_call': [lambda _: logger.debug("Before Telethon call")],
+        #     'on_success': [lambda _: logger.debug("Telethon call success")],
+        #     'on_failure': [lambda _, exc: logger.warning(f"Telethon call failed: {exc}")],
+        #     'on_open': [lambda _: logger.error("Telethon breaker opened!")],
+        #     'on_half_open': [lambda _: logger.info("Telethon breaker half-opened, trying again...")],
+        #     'on_close': [lambda _: logger.info("Telethon breaker closed!")],
+        # }
+    )
+
+# Інстанси брейкерів для різних сервісів
+telethon_breaker = get_telethon_breaker()
+# openai_breaker = CircuitBreaker(fail_max=3, reset_timeout=30, storage=RedisStorage(redis_client, namespace="openai_breaker"))
+# proxy_api_breaker = CircuitBreaker(fail_max=10, reset_timeout=120, storage=RedisStorage(redis_client, namespace="proxy_api_breaker"))
+
+
+
+Використовуйте Circuit Breaker у core/sender.py та core/advanced_osint.py:
+
+# core/sender.py (фрагмент)
+# ...
+from core.circuit_breaker import telethon_breaker
+# ...
+
+class CampaignEngine:
+    # ...
+    async def _send_message(self, client: TelegramClient, target: str, message_text: str,
+                            media_path: Optional[str] = None, buttons: Optional[List[List[Dict]]] = None) -> SendResult:
+        try:
+            # Обгортаємо виклик Telethon Circuit Breaker
+            @telethon_breaker
+            async def _actual_send_message():
+                entity = await client.get_entity(target)
+                # ... (решта вашої логіки відправлення повідомлення)
+                await client.send_message(
+                    entity=entity,
+                    message=message_text,
+                    file=file,
+                    link_preview=False,
+                    silent=True
+                )
+                return SendResult.SUCCESS
+            
+            return await _actual_send_message()
+
+        except CircuitBreakerError:
+            logger.error(f"Circuit Breaker is open for Telethon, skipping message to {target}")
+            return SendResult.NETWORK_ERROR # Або новий статус, наприклад, CIRCUIT_BREAKER_OPEN
+        except FloodWaitError as e:
+            # ... (існуюча логіка обробки FloodWaitError)
+        except UserPrivacyRestrictedError:
+            # ...
+        except Exception as e: # Загальніші винятки будуть оброблені Circuit Breaker
+            logger.error(f"Error sending message to {target}: {e}", exc_info=True)
+            return SendResult.UNKNOWN_ERROR
+
+
+
+4. Розумний AI Асистент для Оптимізації Кампаній (з використанням OpenAI)
+
+Ваша система вже підтримує OpenAI. Розширимо це, створивши AI-асистент, який може аналізувати результати кампаній, пропонувати покращення в тексті оголошень, цільовій аудиторії та навіть адаптувати стратегії розсилки.
+
+Чому це "мега круто":
+
+
+
+
+
+Автоматична оптимізація: AI може допомагати покращувати ефективність кампаній, не вимагаючи постійного ручного втручання.
+
+
+
+Персоналізація: З часом, AI зможе пропонувати більш персоналізовані повідомлення для різних сегментів аудиторії.
+
+
+
+Інноваційні ідеї: AI може генерувати креативні ідеї для текстів, заголовків, кнопок.
+
+Як реалізувати:
+
+
+
+
+
+Розширте core/ai_crm.py або створіть core/ai_optimizer.py:
+
+# core/ai_optimizer.py (новий файл)
+import openai
+import logging
+from typing import Dict, Any, List, Optional
+from config.settings import settings
+
+logger = logging.getLogger(__name__)
+
+class CampaignAIOptimizer:
+    def __init__(self):
+        openai.api_key = settings.OPENAI_API_KEY
+        if not openai.api_key:
+            logger.warning("OPENAI_API_KEY is not set. AI optimization will be disabled.")
+            self.enabled = False
+        else:
+            self.enabled = True
+        self.model = settings.AI_MODEL
+        self.temperature = settings.AI_TEMPERATURE
+        self.max_tokens = settings.AI_MAX_TOKENS
+
+    async def _call_openai(self, prompt: str, system_message: str = "") -> Optional[str]:
+        if not self.enabled:
+            return None
+        try:
+            messages = []
+            if system_message:
+                messages.append({"role": "system", "content": system_message})
+            messages.append({"role": "user", "content": prompt})
+
+            response = await openai.AsyncClient().chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
+            return response.choices.message.content
+        except Exception as e:
+            logger.error(f"OpenAI API call failed: {e}", exc_info=True)
+            return None
+
+    async def analyze_campaign_performance(self, campaign_stats: Dict[str, Any]) -> Optional[str]:
+        """Аналізує статистику кампанії та генерує висновки."""
+        prompt = f"""Проаналізуй наступну статистику маркетингової кампанії Telegram:
+        Загальна кількість цілей: {campaign_stats.get('total_targets')}
+        Надіслано повідомлень: {campaign_stats.get('sent_count')}
+        Успішно доставлено: {campaign_stats.get('success_count')}
+        Помилки доставки: {campaign_stats.get('failed_count')}
+        Середня ефективність ботів: {campaign_stats.get('avg_bot_success_rate')}
+        Вияви ключові тенденції та проблеми.
+        """
+        system_message = "Ти експерт з Telegram маркетингу та аналітики. Надай стислий аналіз ефективності кампанії та вияви ключові проблеми."
+        return await self._call_openai(prompt, system_message)
+
+    async def suggest_message_improvements(self, current_message: str, campaign_results: str) -> Optional[str]:
+        """Пропонує покращення тексту повідомлення на основі результатів кампанії."""
+        prompt = f"""Поточний текст повідомлення: "{current_message}"
+        Результати кампанії: {campaign_results}
+        Запропонуй 3-5 варіантів покращення цього повідомлення, щоб збільшити конверсію. Фокусуйся на чіткості, заклику до дії та уникненні слів, що можуть призвести до блокування. Надай лише покращені варіанти тексту, без додаткових пояснень.
+        """
+        system_message = "Ти креативний копірайтер та фахівець з оптимізації конверсії для Telegram."
+        return await self._call_openai(prompt, system_message)
+    
+    async def recommend_target_segmentation(self, osint_data_summary: str, campaign_goals: str) -> Optional[str]:
+        """Рекомендує сегментацію цільової аудиторії на основі OSINT даних."""
+        prompt = f"""Виходячи з наступних OSINT даних:
+        {osint_data_summary}
+        та цілей кампанії: "{campaign_goals}"
+        Запропонуй оптимальні сегменти цільової аудиторії (наприклад, за демографією, інтересами, активністю) та обґрунтуй, чому саме ці сегменти найбільш ефективні.
+        """
+        system_message = "Ти фахівець з OSINT та таргетингу аудиторії. Надай глибокі рекомендації щодо сегментації."
+        return await self._call_openai(prompt, system_message)
+
+ai_optimizer = CampaignAIOptimizer()
+
+
+
+Інтегруйте у handlers/analytics.py або handlers/operations.py:
+
+
+
+
+
+Створіть нові команди/кнопки, які дозволяють користувачам запускати AI-аналіз та отримувати рекомендації.
+
+# handlers/analytics.py (фрагмент)
+# ...
+from core.ai_optimizer import ai_optimizer
+# ...
+
+@analytics_router.callback_query(F.data == "analytics_campaign_ai_analysis")
+async def get_ai_campaign_analysis(call: CallbackQuery, state: FSMContext):
+    # Отримайте ID кампанії від користувача або з контексту
+    campaign_id = 123 # Приклад
+
+    # Отримайте статистику кампанії з бази даних
+    async with get_session() as session:
+        campaign_repo = CampaignRepository(session)
+        campaign = await campaign_repo.get_campaign_by_id(campaign_id)
+        if not campaign:
+            await call.message.answer("Кампанія не знайдена.")
+            return
+
+        # Формуємо campaign_stats для AI
+        campaign_stats = {
+            "total_targets": campaign.total_targets,
+            "sent_count": campaign.sent_count,
+            "success_count": campaign.success_count,
+            "failed_count": campaign.failed_count,
+            "avg_bot_success_rate": 85.5 # Це потрібно розрахувати
+        }
+    
+    await call.message.answer("📊 Запускаю AI-аналіз кампанії. Це може зайняти деякий час...", parse_mode="HTML")
+    analysis_report = await ai_optimizer.analyze_campaign_performance(campaign_stats)
+
+    if analysis_report:
+        await call.message.answer(
+            f"🧠 <b>AI ЗВІТ ПО КАМПАНІЇ '{campaign.name}'</b>\n\n{analysis_report}",
+            parse_mode="HTML"
+        )
+    else:
+        await call.message.answer("❌ Не вдалося згенерувати AI звіт. Перевірте налаштування OpenAI та логі.")
+    await call.answer()
+
+
+
+5. Розширена Система Плагінів з Гачками
+
+Ваш plugin_system.py існує, але для "мега крутого" рішення йому потрібен механізм, який дозволить плагінам не тільки завантажуватися, але й взаємодіяти з основною логікою системи, вставляючи свій код у певні "гачки".
+
+Чому це "мега круто":
+
+
+
+
+
+Необмежена розширюваність: Користувачі або розробники можуть додавати нову функціональність, не торкаючись основного коду.
+
+
+
+Модульність: Чітке розділення функціоналу на плагіни.
+
+
+
+Гнучкість: Можливість вмикати/вимикати плагіни на льоту, не перезапускаючи всю систему.
+
+Як реалізувати:
+
+
+
+
+
+Розширте core/plugin_system.py:
+
+# core/plugin_system.py (оновлений)
+import importlib.util
+import sys
+import os
+import logging
+from typing import Dict, List, Callable, Any, Coroutine
+
+logger = logging.getLogger(__name__)
+
+class PluginManager:
+    def __init__(self):
+        self.loaded_plugins: Dict[str, Any] = {}
+        self.hooks: Dict[str, List[Callable[..., Coroutine]]] = {} # Словник для зберігання гачків
+
+    def register_hook(self, hook_name: str, func: Callable[..., Coroutine]):
+        """Реєструє асинхронну функцію як гачок для певної події."""
+        if hook_name not in self.hooks:
+            self.hooks[hook_name] = []
+        self.hooks[hook_name].append(func)
+        logger.debug(f"Registered hook '{hook_name}' for function {func.__name__}")
+
+    async def emit_hook(self, hook_name: str, *args, **kwargs) -> List[Any]:
+        """Викликає всі зареєстровані гачки для певної події."""
+        results = []
+        if hook_name in self.hooks:
+            for func in self.hooks[hook_name]:
+                try:
+                    result = await func(*args, **kwargs)
+                    results.append(result)
+                except Exception as e:
+                    logger.error(f"Error executing hook '{hook_name}' in {func.__name__}: {e}", exc_info=True)
+        return results
+
+    async def load_plugin(self, plugin_path: str):
+        """Завантажує окремий плагін з файлу."""
+        try:
+            module_name = os.path.basename(plugin_path).replace(".py", "")
+            spec = importlib.util.spec_from_file_location(module_name, plugin_path)
+            if spec is None:
+                raise ImportError(f"Could not find module spec for {plugin_path}")
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[module_name] = module
+            await spec.loader.exec_module(module)
+
+            if hasattr(module, 'setup_plugin') and callable(module.setup_plugin):
+                # Плагін має функцію setup_plugin, яка приймає manager
+                await module.setup_plugin(self)
+                self.loaded_plugins[module_name] = module
+                logger.info(f"Plugin '{module_name}' loaded successfully from {plugin_path}")
+            else:
+                logger.warning(f"Plugin '{module_name}' from {plugin_path} has no 'setup_plugin' function.")
+
+        except Exception as e:
+            logger.error(f"Failed to load plugin from {plugin_path}: {e}", exc_info=True)
+
+    async def load_all_plugins(self, plugins_dir: str = "plugins"): # Додати директорію для плагінів
+        """Завантажує всі плагіни з вказаної директорії."""
+        if not os.path.exists(plugins_dir):
+            logger.info(f"Plugins directory '{plugins_dir}' does not exist. Skipping plugin loading.")
+            return
+
+        for filename in os.listdir(plugins_dir):
+            if filename.endswith(".py") and filename != "__init__.py":
+                plugin_path = os.path.join(plugins_dir, filename)
+                await self.load_plugin(plugin_path)
+        logger.info(f"Loaded {len(self.loaded_plugins)} plugins.")
+
+    async def unload_all_plugins(self):
+        """Вивантажує всі завантажені плагіни."""
+        for plugin_name in list(self.loaded_plugins.keys()):
+            logger.info(f"Unloading plugin '{plugin_name}'...")
+            # Можливо, потрібно викликати функцію teardown_plugin у плагіні
+            if hasattr(self.loaded_plugins[plugin_name], 'teardown_plugin') and callable(self.loaded_plugins[plugin_name].teardown_plugin):
+                await self.loaded_plugins[plugin_name].teardown_plugin(self)
+            del self.loaded_plugins[plugin_name]
+            if plugin_name in sys.modules:
+                del sys.modules[plugin_name]
+        self.loaded_plugins.clear()
+        self.hooks.clear() # Очистити гачки при вивантаженні
+        logger.info("All plugins unloaded and hooks cleared.")
+
+plugin_manager = PluginManager()
+
+
+
+Створіть директорію plugins/ в корені проекту:
+
+shadow_system_v2/
+├── plugins/
+│   ├── __init__.py
+│   └── my_custom_plugin.py
+└── ...
+
+
+
+Приклад плагіну plugins/my_custom_plugin.py:
+
+# plugins/my_custom_plugin.py
+import logging
+from aiogram import Bot
+from typing import Any, Dict
+
+logger = logging.getLogger(__name__)
+
+# Приклад гачка: Зміна тексту повідомлення перед відправкою
+async def modify_outgoing_message_hook(original_message: str, chat_id: int, **kwargs) -> str:
+    logger.info(f"Plugin modifying message for chat {chat_id}")
+    # Тут може бути логіка для додавання підпису, реклами, тощо
+    modified_message = f"🌟 {original_message}\n\n#MyCustomTag"
+    return modified_message
+
+# Приклад гачка: Обробка нових даних OSINT
+async def process_new_osint_data_hook(osint_data: Dict[str, Any], user_id: int, **kwargs):
+    logger.info(f"Plugin processing new OSINT data for user {user_id}: {osint_data.get('data_type')}")
+    # Тут може бути логіка для додаткової обробки, збереження в іншу систему, тощо
+    # наприклад, інтеграція з зовнішнім CRM або BI інструментом
+    if osint_data.get('data_type') == 'chat_members':
+        total_members = osint_data.get('members_extracted')
+        logger.info(f"New chat members extracted: {total_members}")
+        # Можна надіслати сповіщення адміну або оновити внутрішню статистику
+    return {"status": "processed_by_plugin", "plugin": "my_custom_plugin"}
+
+
+async def setup_plugin(manager: "PluginManager"):
+    """Функція, яка викликається при завантаженні плагіну."""
+    logger.info("MyCustomPlugin setting up...")
+    manager.register_hook("before_message_send", modify_outgoing_message_hook)
+    manager.register_hook("on_osint_data_saved", process_new_osint_data_hook)
+    # manager.register_hook("on_bot_status_change", my_bot_status_handler)
+    # manager.register_hook("on_campaign_start", my_campaign_start_logic)
+    logger.info("MyCustomPlugin hooks registered.")
+
+async def teardown_plugin(manager: "PluginManager"):
+    """Функція, яка викликається при вивантаженні плагіну."""
+    logger.info("MyCustomPlugin tearing down...")
+    # При вивантаженні плагін автоматично видаляється з реєстру гачків
+
+
+
+Використовуйте гачки у вашому коді:
+
+# core/sender.py (фрагмент)
+# ...
+from core.plugin_system import plugin_manager
+# ...
+class CampaignEngine:
+    # ...
+    async def _send_message(self, client: TelegramClient, target: str, message_text: str,
+                            media_path: Optional[str] = None, buttons: Optional[List[List[Dict]]] = None) -> SendResult:
+        # ...
+        # Перед відправкою повідомлення, викликаємо гачок
+        modified_messages = await plugin_manager.emit_hook(
+            "before_message_send", original_message=message_text, chat_id=entity.id
+        )
+        # Якщо плагіни повернули модифікований текст, використовуємо його
+        if modified_messages and modified_messages is not None: # Може бути кілька плагінів, беремо перший
+            message_text = modified_messages
+
+        # ... (решта логіки відправлення повідомлення)
+
+# core/advanced_osint.py (фрагмент)
+# ...
+from core.plugin_system import plugin_manager
+# ...
+class AdvancedOSINTEngine:
+    # ...
+    async def save_osint_data(self, user_id: int, data_type: OSINTType,
+                            data: Dict, filename: str) -> Optional[str]:
+        # ... (існуюча логіка збереження в базу)
+        
+        # Після збереження даних, викликаємо гачок
+        await plugin_manager.emit_hook(
+            "on_osint_data_saved", osint_data=data, user_id=user_id, data_type=data_type
+        )
+        return str(file_path)
+
+
+
+6. Мікросервісний Підхід до Core Модулів
+
+Ваш поточний core вже містить багато модулів. Для досягнення максимальної масштабованості та розробки окремими командами (якщо проект зросте), можна розглянути виділення деяких ключових "двигунів" (наприклад, Sender, AdvancedOSINT, AI_CRM) в окремі мікросервіси.
+
+Чому це "мега круто":
+
+
+
+
+
+Незалежне розгортання: Кожен сервіс може розгортатися, масштабуватися та оновлюватися незалежно.
+
+
+
+Технологічна гнучкість: Різні сервіси можуть використовувати різні мови програмування або технології (хоча для Python-проекту це, можливо, не пріоритет).
+
+
+
+Стійкість: Збій в одному мікросервісі не призведе до падіння всієї системи.
+
+Як це може виглядати (концептуально):
+
+
+
+
+
+ShadowGateway (Telegram бот + FastAPI API) відповідає за взаємодію з користувачем та маршрутизацію запитів.
+
+
+
+SenderService (окремий сервіс на базі FastAPI або gRPC) приймає запити на розсилку від ShadowGateway через чергу повідомлень (наприклад, RabbitMQ, Kafka) або прямий API виклик.
+
+
+
+OSINTService (інший сервіс) обробляє складні запити OSINT.
+
+
+
+AIService (ще один сервіс) надає функціонал AI.
+
+
+
+Всі сервіси взаємодіють з спільною базою даних та Redis.
+
+
+
+Підсумок та наступні кроки:
+
+Ці покращення є значними архітектурними кроками, які зроблять ваш Shadow System V2.0 не просто функціональним, а й надзвичайно надійним, гнучким та масштабованим.
+
+
+
+
+
+Розбиття файлів: Почніть з організації файлів, як було запропоновано у моїй попередній відповіді та додатково для репозиторіїв та Celery.
+
+
+
+Впровадження Celery: Це має бути вашим пріоритетом, оскільки воно вирішує проблеми продуктивності та надійності для тривалих операцій.
+
+
+
+Repository Pattern: Після Celery, перехід на репозиторії спростить подальшу розробку та тестування.
+
+
+
+Circuit Breaker: Забезпечить додатковий рівень стійкості, особливо для критичних зовнішніх взаємодій.
+
+
+
+AI Оптимізатор: Додасть інтелектуальний шар до ваших кампаній.
+
+
+
+Система Плагінів: Якщо ви плануєте відкриту розробку або дуже гнучку систему, це ключ до майбутнього зростання.
+
+Якщо у вас виникнуть запитання щодо будь-якого з цих кроків або ви захочете заглибитися в деталі конкретної реалізації, дайте мені знати! Я тут, щоб допомогти вам зробити ваш проект справді "мега крутим".

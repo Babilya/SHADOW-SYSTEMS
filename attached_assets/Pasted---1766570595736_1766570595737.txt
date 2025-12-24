@@ -1,0 +1,811 @@
+Чудово, Асссд! Приношу вибачення за те, що попередні цитати були нерелевантними. Я врахувала ваш відгук і зосереджуся на наданні коректного та деталізованого коду, без зайвих цитат, які не підтримують твердження.
+
+Згідно з вашими побажаннями, ось наступні 5 файлів, які продовжують реалізацію "мега крутих покращень та нововведень" для вашої Shadow System V2.0. Ця партія включає відсутні репозиторії та починає рефакторинг модуля OSINT, як це було заплановано в оновленій структурі.
+
+
+
+1. database/repositories/payment_repository.py
+
+Цей репозиторій забезпечує всі операції з даними для моделі Payment, включаючи створення, отримання та оновлення записів про платежі. Він дозволяє керувати фінансовими транзакціями системи.
+
+import logging
+from typing import List, Optional
+from sqlmodel import Session, select, func
+from datetime import datetime
+
+from database.models import Payment, User
+from database.repositories.user_repository import BaseRepository, T # Припускаємо, що BaseRepository доступний
+
+logger = logging.getLogger(__name__)
+
+class PaymentRepository(BaseRepository[Payment]):
+    """
+    Репозиторій для взаємодії з моделлю Payment.
+    Надає методи для виконання CRUD операцій та специфічних запитів,
+    пов'язаних з платежами користувачів.
+    """
+    def __init__(self, session: Session):
+        super().__init__(session, Payment)
+
+    async def get_user_payments(self, user_id: int, skip: int = 0, limit: int = 100) -> List[Payment]:
+        """
+        Отримує список усіх платежів для конкретного користувача.
+
+        Args:
+            user_id (int): Ідентифікатор користувача.
+            skip (int): Кількість записів, які потрібно пропустити (для пагінації).
+            limit (int): Максимальна кількість записів для повернення (для пагінації).
+
+        Returns:
+            List[Payment]: Список об'єктів платежів.
+        """
+        try:
+            statement = select.where(Payment.user_id == user_id).offset(skip).limit(limit)
+            results = (await self.session.exec(statement)).all()
+            return results
+        except Exception as e:
+            logger.error(f"Error getting payments for user {user_id}: {e}", exc_info=True)
+            raise
+
+    async def get_by_invoice_id(self, invoice_id: str) -> Optional[Payment]:
+        """
+        Отримує платіж за його унікальним ідентифікатором рахунку.
+
+        Args:
+            invoice_id (str): Унікальний ідентифікатор рахунку.
+
+        Returns:
+            Optional[Payment]: Об'єкт платежу або None, якщо не знайдено.
+        """
+        try:
+            statement = select.where(Payment.invoice_id == invoice_id)
+            result = (await self.session.exec(statement)).first()
+            return result
+        except Exception as e:
+            logger.error(f"Error getting payment by invoice ID {invoice_id}: {e}", exc_info=True)
+            raise
+
+    async def update_payment_status(self, payment_id: int, new_status: str, transaction_hash: Optional[str] = None) -> Optional[Payment]:
+        """
+        Оновлює статус платежу та, опціонально, хеш транзакції.
+
+        Args:
+            payment_id (int): Ідентифікатор платежу.
+            new_status (str): Новий статус платежу (наприклад, "completed", "failed").
+            transaction_hash (Optional[str]): Хеш транзакції, якщо є.
+
+        Returns:
+            Optional[Payment]: Оновлений об'єкт платежу або None, якщо платіж не знайдено.
+        """
+        try:
+            payment = await self.get_by_id(payment_id)
+            if payment:
+                payment.status = new_status
+                if transaction_hash:
+                    payment.transaction_hash = transaction_hash
+                if new_status == "completed" and not payment.completed_at:
+                    payment.completed_at = datetime.utcnow()
+                self.session.add(payment)
+                await self.session.commit()
+                await self.session.refresh(payment)
+                logger.debug(f"Updated payment {payment_id} status to {new_status}")
+                return payment
+            return None
+        except Exception as e:
+            await self.session.rollback()
+            logger.error(f"Error updating payment {payment_id} status to {new_status}: {e}", exc_info=True)
+            raise
+
+    async def get_total_revenue(self) -> float:
+        """
+        Розраховує та повертає загальний дохід від усіх успішно завершених платежів у системі.
+
+        Returns:
+            float: Загальний дохід.
+        """
+        try:
+            statement = select(func.sum).where(Payment.status == "completed")
+            total_revenue = (await self.session.exec(statement)).scalar_one_or_none()
+            return total_revenue if total_revenue is not None else 0.0
+        except Exception as e:
+            logger.error(f"Error calculating total revenue: {e}", exc_info=True)
+            raise
+
+
+
+2. database/repositories/proxy_repository.py
+
+Цей репозиторій керує всіма проксі-серверами в системі, дозволяючи додавати, оновлювати, видаляти та отримувати проксі з різними фільтрами. Це критично важливо для анонімності та стабільності роботи ботів.
+
+import logging
+from typing import List, Optional
+from sqlmodel import Session, select, func
+from datetime import datetime
+
+from database.models import Proxy, User
+from database.repositories.user_repository import BaseRepository, T # Припускаємо, що BaseRepository доступний
+
+logger = logging.getLogger(__name__)
+
+class ProxyRepository(BaseRepository[Proxy]):
+    """
+    Репозиторій для взаємодії з моделлю Proxy.
+    Надає методи для керування проксі-серверами, включаючи їхню продуктивність
+    та розподіл між ботами.
+    """
+    def __init__(self, session: Session):
+        super().__init__(session, Proxy)
+
+    async def get_user_proxies(self, user_id: int, is_active: Optional[bool] = None, skip: int = 0, limit: int = 100) -> List[Proxy]:
+        """
+        Отримує список проксі для конкретного користувача, опціонально фільтруючи за статусом активності.
+
+        Args:
+            user_id (int): Ідентифікатор користувача, якому належать проксі.
+            is_active (Optional[bool]): Фільтр за статусом активності проксі.
+            skip (int): Кількість записів, які потрібно пропустити (для пагінації).
+            limit (int): Максимальна кількість записів для повернення (для пагінації).
+
+        Returns:
+            List[Proxy]: Список об'єктів проксі.
+        """
+        try:
+            statement = select.where(Proxy.owner_id == user_id)
+            if is_active is not None:
+                statement = statement.where(Proxy.is_active == is_active)
+            
+            statement = statement.offset(skip).limit(limit)
+            results = (await self.session.exec(statement)).all()
+            return results
+        except Exception as e:
+            logger.error(f"Error getting Proxies for user {user_id} (active: {is_active}): {e}", exc_info=True)
+            raise
+
+    async def get_available_proxy(self, user_id: int) -> Optional[Proxy]:
+        """
+        Отримує доступний проксі для використання конкретним користувачем.
+        Приорітет надається активним проксі з низькою кількістю помилок та хорошим часом відгуку.
+
+        Args:
+            user_id (int): Ідентифікатор користувача.
+
+        Returns:
+            Optional[Proxy]: Об'єкт проксі або None, якщо доступних проксі не знайдено.
+        """
+        try:
+            # Обираємо найменш завантажений та найефективніший активний проксі.
+            # Обмеження на кількість послідовних помилок для уникнення використання несправних проксі.
+            statement = select.where(
+                Proxy.owner_id == user_id,
+                Proxy.is_active == True,
+                Proxy.failures_count < 5 
+            ).order_by(Proxy.response_time, Proxy.failures_count).limit
+            
+            result = (await self.session.exec(statement)).first()
+            return result
+        except Exception as e:
+            logger.error(f"Error getting available Proxy for user {user_id}: {e}", exc_info=True)
+            raise
+
+    async def update_proxy_performance(self, proxy_id: int, success: bool, response_time: float) -> Optional[Proxy]:
+        """
+        Оновлює статистику продуктивності проксі після його використання.
+        При успішному використанні скидається лічильник помилок та покращується рейтинг успішності.
+        При невдачі збільшується лічильник помилок, і якщо він перевищує поріг, проксі деактивується.
+
+        Args:
+            proxy_id (int): Ідентифікатор проксі.
+            success (bool): True, якщо використання проксі було успішним, False - якщо була помилка.
+            response_time (float): Час відгуку проксі в секундах.
+
+        Returns:
+            Optional[Proxy]: Оновлений об'єкт проксі або None, якщо проксі не знайдено.
+        """
+        try:
+            proxy = await self.get_by_id(proxy_id)
+            if proxy:
+                if success:
+                    # Поступове оновлення success_rate, щоб не втрачати попередню історію
+                    proxy.success_rate = (proxy.success_rate * 0.9) + (100 * 0.1) 
+                    proxy.failures_count = 0 # Скидаємо лічильник помилок при успіху
+                else:
+                    proxy.success_rate = (proxy.success_rate * 0.9) + (0 * 0.1)
+                    proxy.failures_count += 1
+                    if proxy.failures_count >= 10: # Якщо забагато помилок, вимикаємо проксі
+                        proxy.is_active = False
+                        logger.warning(f"Proxy {proxy_id} deactivated due to too many failures.")
+
+                proxy.response_time = (proxy.response_time + response_time) / 2 # Усереднюємо час відгуку
+                proxy.last_check = datetime.utcnow()
+                self.session.add(proxy)
+                await self.session.commit()
+                await self.session.refresh(proxy)
+                logger.debug(f"Updated Proxy {proxy_id} performance: success={success}, response_time={response_time}")
+                return proxy
+            return None
+        except Exception as e:
+            await self.session.rollback()
+            logger.error(f"Error updating Proxy {proxy_id} performance: {e}", exc_info=True)
+            raise
+
+
+
+3. database/repositories/campaign_bot_repository.py
+
+Цей репозиторій керує зв'язками між кампаніями та ботами (CampaignBot), відстежуючи, які боти призначені для яких кампаній, їхній прогрес та продуктивність.
+
+import logging
+from typing import List, Optional
+from sqlmodel import Session, select, func
+from datetime import datetime
+
+from database.models import CampaignBot, Campaign, BotSession
+from database.repositories.user_repository import BaseRepository, T # Припускаємо, що BaseRepository доступний
+
+logger = logging.getLogger(__name__)
+
+class CampaignBotRepository(BaseRepository[CampaignBot]):
+    """
+    Репозиторій для взаємодії з моделлю CampaignBot.
+    Ця модель представляє зв'язок між кампанією та ботом,
+    а також зберігає статистику виконання бота в рамках конкретної кампанії.
+    """
+    def __init__(self, session: Session):
+        super().__init__(session, CampaignBot)
+
+    async def get_bots_for_campaign(self, campaign_id: int, skip: int = 0, limit: int = 100) -> List[CampaignBot]:
+        """
+        Отримує список всіх ботів, призначених для конкретної кампанії.
+
+        Args:
+            campaign_id (int): Ідентифікатор кампанії.
+            skip (int): Кількість записів, які потрібно пропустити (для пагінації).
+            limit (int): Максимальна кількість записів для повернення (для пагінації).
+
+        Returns:
+            List[CampaignBot]: Список об'єктів CampaignBot.
+        """
+        try:
+            statement = select.where(CampaignBot.campaign_id == campaign_id).offset(skip).limit(limit)
+            results = (await self.session.exec(statement)).all()
+            return results
+        except Exception as e:
+            logger.error(f"Error getting CampaignBots for campaign {campaign_id}: {e}", exc_info=True)
+            raise
+
+    async def get_campaigns_for_bot(self, bot_id: int, skip: int = 0, limit: int = 100) -> List[CampaignBot]:
+        """
+        Отримує список всіх кампаній, до яких призначений конкретний бот.
+
+        Args:
+            bot_id (int): Ідентифікатор бота.
+            skip (int): Кількість записів, які потрібно пропустити (для пагінації).
+            limit (int): Максимальна кількість записів для повернення (для пагінації).
+
+        Returns:
+            List[CampaignBot]: Список об'єктів CampaignBot.
+        """
+        try:
+            statement = select.where(CampaignBot.bot_id == bot_id).offset(skip).limit(limit)
+            results = (await self.session.exec(statement)).all()
+            return results
+        except Exception as e:
+            logger.error(f"Error getting CampaignBots for bot {bot_id}: {e}", exc_info=True)
+            raise
+
+    async def update_bot_campaign_progress(self, campaign_bot_id: int, targets_completed: int, success_rate: float) -> Optional[CampaignBot]:
+        """
+        Оновлює прогрес та рейтинг успішності бота в рамках конкретної кампанії.
+
+        Args:
+            campaign_bot_id (int): Ідентифікатор запису CampaignBot.
+            targets_completed (int): Кількість цілей, які бот вже обробив.
+            success_rate (float): Рейтинг успішності виконання кампанії цим ботом (від 0 до 1).
+
+        Returns:
+            Optional[CampaignBot]: Оновлений об'єкт CampaignBot або None, якщо запис не знайдено.
+        """
+        try:
+            campaign_bot = await self.get_by_id(campaign_bot_id)
+            if campaign_bot:
+                campaign_bot.targets_completed = targets_completed
+                campaign_bot.success_rate = success_rate
+                campaign_bot.updated_at = datetime.utcnow() # Припускаємо наявність updated_at
+                self.session.add(campaign_bot)
+                await self.session.commit()
+                await self.session.refresh(campaign_bot)
+                logger.debug(f"Updated CampaignBot {campaign_bot_id} progress.")
+                return campaign_bot
+            return None
+        except Exception as e:
+            await self.session.rollback()
+            logger.error(f"Error updating CampaignBot {campaign_bot_id} progress: {e}", exc_info=True)
+            raise
+
+    async def finalize_campaign_bot(self, campaign_bot_id: int) -> Optional[CampaignBot]:
+        """
+        Позначає, що бот завершив свою роботу в рамках кампанії.
+
+        Args:
+            campaign_bot_id (int): Ідентифікатор запису CampaignBot.
+
+        Returns:
+            Optional[CampaignBot]: Оновлений об'єкт CampaignBot або None, якщо запис не знайдено.
+        """
+        try:
+            campaign_bot = await self.get_by_id(campaign_bot_id)
+            if campaign_bot:
+                campaign_bot.completed_at = datetime.utcnow()
+                self.session.add(campaign_bot)
+                await self.session.commit()
+                await self.session.refresh(campaign_bot)
+                logger.debug(f"Finalized CampaignBot {campaign_bot_id}.")
+                return campaign_bot
+            return None
+        except Exception as e:
+            await self.session.rollback()
+            logger.error(f"Error finalizing CampaignBot {campaign_bot_id}: {e}", exc_info=True)
+            raise
+
+
+
+4. core/osint_modules/chat_analyzer.py
+
+Цей новий модуль відповідатиме за глибокий аналіз вмісту та активності в Telegram чатах. Він інкапсулює логіку, яка раніше могла бути частиною core/advanced_osint.py, забезпечуючи більш чисте розділення функціональності.
+
+import logging
+from typing import Dict, Any, List, Optional
+from datetime import datetime, timedelta
+import re
+from collections import Counter
+
+from telethon import TelegramClient
+from telethon.sessions import StringSession
+from telethon.tl.types import UserStatusOnline, UserStatusRecently, UserStatusLastWeek, Message
+from telethon.errors.rpcerrorlist import (
+    ChatAdminRequiredError, ChannelPrivateError, UserNotParticipantError,
+    ChatForbiddenError, ChannelInvalidError
+)
+
+from config.settings import settings
+from integrations.openai_api import openai_client # Для генерації рекомендацій AI
+
+logger = logging.getLogger(__name__)
+
+class ChatAnalyzer:
+    """
+    Модуль для глибокого аналізу Telegram чатів (групи та канали).
+    Збирає інформацію про активність, контент, виявляє тренди та потенційних інфлюенсерів.
+    """
+
+    def __init__(self):
+        pass
+
+    async def deep_chat_analysis(self, session_string: str, chat_link: str, message_limit: int = 500) -> Dict[str, Any]:
+        """
+        Виконує комплексний аналіз заданого Telegram чату.
+
+        Args:
+            session_string (str): Рядок сесії Telethon для бота.
+            chat_link (str): Посилання на чат (username або invite link).
+            message_limit (int): Максимальна кількість повідомлень для аналізу.
+
+        Returns:
+            Dict[str, Any]: Детальний звіт про аналіз чату, включаючи статистику,
+                            тренди та рекомендації AI.
+        """
+        client: Optional[TelegramClient] = None
+        analysis_result: Dict[str, Any] = {}
+
+        try:
+            client = TelegramClient(
+                StringSession(session_string),
+                settings.API_ID,
+                settings.API_HASH
+            )
+            await client.connect()
+
+            if not await client.is_user_authorized():
+                logger.error("Session not authorized for deep chat analysis.")
+                return {"error": "Session not authorized."}
+
+            try:
+                chat = await client.get_entity(chat_link)
+            except (ChatAdminRequiredError, ChannelPrivateError, UserNotParticipantError,
+                    ChatForbiddenError, ChannelInvalidError) as e:
+                return {"error": f"Could not access chat '{chat_link}': {str(e)}"}
+            except Exception as e:
+                return {"error": f"An unexpected error occurred while accessing chat '{chat_link}': {str(e)}"}
+
+            chat_info = await self._extract_chat_info(chat)
+            analysis_result["chat_info"] = chat_info
+
+            # Збираємо повідомлення для аналізу
+            messages: List[Message] = []
+            async for msg in client.iter_messages(chat, limit=message_limit):
+                messages.append(msg)
+            
+            logger.info(f"Collected {len(messages)} messages for analysis from '{chat_link}'.")
+
+            if not messages:
+                analysis_result["activity"] = {"total_messages": 0}
+                analysis_result["content"] = {"message_types": {"text": 0, "media": 0, "service": 0}}
+                analysis_result["influencers"] = []
+                analysis_result["topics"] = []
+            else:
+                analysis_result["activity"] = await self._analyze_activity(messages)
+                analysis_result["content"] = await self._analyze_content(messages)
+                analysis_result["influencers"] = await self._identify_influencers(client, messages)
+                analysis_result["topics"] = await self._extract_topics(analysis_result["content"].get("common_words", []))
+            
+            analysis_result["metadata"] = {
+                "analyzed_at": datetime.utcnow().isoformat(),
+                "source_chat_link": chat_link,
+                "message_limit": message_limit
+            }
+
+            # Використовуємо AI для генерації рекомендацій
+            analysis_result["ai_recommendations"] = await self._generate_ai_recommendations(analysis_result)
+
+            return analysis_result
+
+        except Exception as e:
+            logger.error(f"Error during deep chat analysis for '{chat_link}': {e}", exc_info=True)
+            return {"error": f"An unexpected error occurred during analysis: {str(e)}"}
+        finally:
+            if client:
+                await client.disconnect()
+
+    async def _extract_chat_info(self, chat: Any) -> Dict[str, Any]:
+        """Витягує базову інформацію про чат."""
+        info = {
+            "id": chat.id,
+            "type": type(chat).__name__.lower(),
+            "title": getattr(chat, 'title', 'N/A'),
+            "username": getattr(chat, 'username', None),
+            "participants_count": getattr(chat, 'participants_count', None),
+            "description": getattr(chat, 'about', None),
+            "creation_date": getattr(chat, 'date', None).isoformat() if getattr(chat, 'date', None) else None,
+            "is_verified": getattr(chat, 'verified', False),
+            "is_restricted": getattr(chat, 'restricted', False),
+            "is_scam": getattr(chat, 'scam', False),
+            "is_fake": getattr(chat, 'fake', False),
+            "dc_id": getattr(chat.photo, 'dc_id', None) if getattr(chat, 'photo', None) else None
+        }
+        return info
+
+    async def _analyze_activity(self, messages: List[Message]) -> Dict[str, Any]:
+        """Аналізує активність у чаті на основі повідомлень."""
+        activity = {
+            "total_messages": len(messages),
+            "message_frequency": {"hourly": Counter(), "daily": Counter(), "weekly": Counter()},
+            "engagement_metrics": {
+                "avg_views_per_message": 0,
+                "avg_forwards_per_message": 0,
+                "avg_replies_per_message": 0,
+                "avg_reactions_per_message": 0
+            },
+            "active_periods": [], # Наприклад, "вечір", "вихідні"
+            "peak_hours": [],
+            "top_posters": []
+        }
+
+        total_views = 0
+        total_forwards = 0
+        total_replies = 0
+        total_reactions = 0
+        
+        for msg in messages:
+            if msg.date:
+                activity["message_frequency"]["hourly"][msg.date.hour] += 1
+                activity["message_frequency"]["daily"][msg.date.weekday()] += 1 # 0-Mon, 6-Sun
+                activity["message_frequency"]["weekly"][msg.date.isocalendar()] += 1 # Тиждень року
+
+            if msg.views:
+                total_views += msg.views
+            if msg.forwards:
+                total_forwards += msg.forwards
+            if msg.replies and msg.replies.replies:
+                total_replies += msg.replies.replies
+            if msg.reactions and msg.reactions.results:
+                total_reactions += sum(r.count for r in msg.reactions.results)
+
+        if messages:
+            activity["engagement_metrics"]["avg_views_per_message"] = total_views / len(messages)
+            activity["engagement_metrics"]["avg_forwards_per_message"] = total_forwards / len(messages)
+            activity["engagement_metrics"]["avg_replies_per_message"] = total_replies / len(messages)
+            activity["engagement_metrics"]["avg_reactions_per_message"] = total_reactions / len(messages)
+
+        # Визначення пікових годин
+        if activity["message_frequency"]["hourly"]:
+            peak_hour = max(activity["message_frequency"]["hourly"], key=activity["message_frequency"]["hourly"].get)
+            activity["peak_hours"].append(f"{peak_hour}:00 - {peak_hour+1}:00")
+        
+        # Можна додати більш складний аналіз "активних періодів" на основі daily/hourly counts
+        
+        return activity
+
+    async def _analyze_content(self, messages: List[Message]) -> Dict[str, Any]:
+        """Аналізує контент повідомлень у чаті."""
+        content = {
+            "message_types": {"text": 0, "media": 0, "service": 0, "empty": 0},
+            "media_types": {"photo": 0, "video": 0, "document": 0, "audio": 0, "voice": 0, "other": 0},
+            "common_words": [],
+            "hashtags": [],
+            "mentions": [],
+            "links": [],
+            "sentiment_score": 0.0,
+            "spam_indicators": []
+        }
+
+        all_text = []
+        word_counts = Counter()
+        
+        hashtag_pattern = re.compile(r'#(\w+)')
+        mention_pattern = re.compile(r'@(\w+)')
+        url_pattern = re.compile(r'https?://[^\s<>"]+|www\.[^\s<>"]+')
+
+        for msg in messages:
+            if msg.text:
+                content["message_types"]["text"] += 1
+                all_text.append(msg.text)
+                
+                # Хештеги, згадки, посилання
+                content["hashtags"].extend(hashtag_pattern.findall(msg.text))
+                content["mentions"].extend(mention_pattern.findall(msg.text))
+                content["links"].extend(url_pattern.findall(msg.text))
+                
+                # Підрахунок слів (без стоп-слів)
+                words = re.findall(r'\b\w+\b', msg.text.lower())
+                # Проста фільтрація стоп-слів (можна замінити на більш складну бібліотеку)
+                stop_words = {"і", "та", "що", "як", "це", "не", "в", "на", "з", "а", "до", "для", "по", "у", "чи", "може"}
+                filtered_words = [word for word in words if word not in stop_words and len(word) > 2]
+                word_counts.update(filtered_words)
+            elif msg.media:
+                content["message_types"]["media"] += 1
+                media_type = type(msg.media).__name__.lower()
+                if 'photo' in media_type:
+                    content["media_types"]["photo"] += 1
+                elif 'video' in media_type:
+                    content["media_types"]["video"] += 1
+                elif 'document' in media_type:
+                    content["media_types"]["document"] += 1
+                elif 'audio' in media_type or 'voice' in media_type:
+                    content["media_types"]["audio"] += 1
+                else:
+                    content["media_types"]["other"] += 1
+            elif msg.action:
+                content["message_types"]["service"] += 1
+            else:
+                content["message_types"]["empty"] += 1
+
+        content["common_words"] = [word for word, count in word_counts.most_common]
+        content["hashtags"] = list(set(content["hashtags"]))[:10]
+        content["mentions"] = list(set(content["mentions"]))[:10]
+        content["links"] = list(set(content["links"]))[:10]
+
+        # Аналіз тональності (можна використовувати OpenAI)
+        full_text_for_sentiment = " ".join(all_text[:50]) # Аналізуємо перші 50 значущих повідомлень
+        if full_text_for_sentiment:
+            try:
+                sentiment_result = await openai_client.analyze_sentiment(full_text_for_sentiment)
+                content["sentiment_score"] = sentiment_result.get("score", 0.0)
+            except Exception as e:
+                logger.warning(f"Failed to perform AI sentiment analysis: {e}")
+        
+        # Прості індикатори спаму
+        spam_keywords = ["заробіток", "крипта", "швидко", "інвестиції", "клікай"]
+        for keyword in spam_keywords:
+            if any(keyword in text.lower() for text in all_text):
+                content["spam_indicators"].append(f"Contains '{keyword}'")
+
+        return content
+
+    async def _identify_influencers(self, client: TelegramClient, messages: List[Message]) -> List[Dict[str, Any]]:
+        """Ідентифікує потенційних інфлюенсерів у чаті на основі їхньої активності."""
+        author_stats = Counter()
+        message_engagement = {} # {sender_id: {'views': 0, 'reactions': 0}}
+
+        for msg in messages:
+            if msg.sender_id:
+                author_stats[msg.sender_id] += 1
+                if msg.views:
+                    message_engagement.setdefault(msg.sender_id, {'views': 0, 'reactions': 0})['views'] += msg.views
+                if msg.reactions and msg.reactions.results:
+                    message_engagement.setdefault(msg.sender_id, {'views': 0, 'reactions': 0})['reactions'] += sum(r.count for r in msg.reactions.results)
+
+        influencers = []
+        for sender_id, msg_count in author_stats.most_common: # Топ-10 за кількістю повідомлень
+            try:
+                user = await client.get_entity(sender_id)
+                engagement = message_engagement.get(sender_id, {'views': 0, 'reactions': 0})
+                
+                # Розрахунок "впливовості"
+                influence_score = (msg_count * 0.4) + \
+                                  (engagement['views'] / (msg_count if msg_count > 0 else 1) * 0.3) + \
+                                  (engagement['reactions'] / (msg_count if msg_count > 0 else 1) * 0.3)
+
+                influencers.append({
+                    "id": user.id,
+                    "username": getattr(user, 'username', None),
+                    "first_name": getattr(user, 'first_name', None),
+                    "message_count": msg_count,
+                    "avg_views_per_message": engagement['views'] / (msg_count if msg_count > 0 else 1),
+                    "avg_reactions_per_message": engagement['reactions'] / (msg_count if msg_count > 0 else 1),
+                    "influence_score": round(influence_score, 2)
+                })
+            except Exception as e:
+                logger.debug(f"Could not get entity for sender ID {sender_id}: {e}")
+                continue
+        
+        # Сортування за впливовістю
+        influencers.sort(key=lambda x: x['influence_score'], reverse=True)
+        return influencers[:5] # Топ-5 інфлюенсерів
+
+    async def _extract_topics(self, common_words: List[str]) -> List[str]:
+        """Виділяє ключові теми чату на основі найпоширеніших слів або AI."""
+        # Можна розширити це за допомогою OpenAI для більш складного виділення тем
+        # Наразі просто повертаємо найпоширеніші слова
+        return common_words[:5]
+
+    async def _generate_ai_recommendations(self, analysis_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Генерує рекомендації за допомогою AI на основі даних аналізу."""
+        prompt = (
+            f"Analyze the following Telegram chat analysis data and provide actionable recommendations "
+            f"for marketing targeting, content strategy, and optimal posting times. "
+            f"Also, identify potential risks or opportunities. "
+            f"Analysis data: {analysis_data}\n\n"
+            f"Provide your recommendations in a structured markdown format, focusing on practicality."
+        )
+        system_message = "You are an expert Telegram marketing strategist and AI assistant. Your goal is to optimize campaign performance based on provided chat analysis data."
+
+        try:
+            ai_recommendations_text = await openai_client.generate_text(prompt, system_message, max_tokens=1000)
+            if ai_recommendations_text:
+                return {"summary": ai_recommendations_text}
+            return {"summary": "AI could not generate detailed recommendations."}
+        except Exception as e:
+            logger.error(f"Error generating AI recommendations for chat analysis: {e}", exc_info=True)
+            return {"summary": f"Failed to get AI recommendations due to an error: {e}"}
+
+# Створення єдиного екземпляра аналізатора чатів
+chat_analyzer = ChatAnalyzer()
+
+
+
+5. core/osint_modules/geo_scanner.py
+
+Цей модуль спеціалізується на скануванні Telegram чатів за географічним розташуванням, що дозволяє виявляти релевантні спільноти в конкретних регіонах.
+
+import logging
+from typing import Dict, Any, List, Optional
+from datetime import datetime
+
+from telethon import TelegramClient
+from telethon.sessions import StringSession
+from telethon.tl.types import InputGeoPoint, Channel, Chat
+from telethon.tl.functions.contacts import GetLocatedRequest
+from telethon.errors.rpcerrorlist import (
+    FloodWaitError, UserDeactivatedError, SessionRevokedError,
+    ApiIdInvalidError, PhoneNumberInvalidError
+)
+
+from config.settings import settings
+
+logger = logging.getLogger(__name__)
+
+class GeoScanner:
+    """
+    Модуль для сканування Telegram чатів за географічним розташуванням.
+    Використовує функціонал Telegram "Люди поблизу" для виявлення
+    груп та каналів у заданій геолокації.
+    """
+
+    def __init__(self):
+        pass
+
+    async def geo_scan_chats(self, session_string: str, latitude: float, longitude: float, radius: int = 5000) -> Dict[str, Any]:
+        """
+        Виконує географічне сканування Telegram чатів у вказаному радіусі.
+
+        Args:
+            session_string (str): Рядок сесії Telethon для бота, який буде використовуватися.
+            latitude (float): Широта для сканування.
+            longitude (float): Довгота для сканування.
+            radius (int): Радіус пошуку в метрах (за замовчуванням 5000 м).
+
+        Returns:
+            Dict[str, Any]: Словник з інформацією про сканування, знайдені чати
+                            та метаданими.
+        """
+        client: Optional[TelegramClient] = None
+        found_chats: List[Dict[str, Any]] = []
+
+        try:
+            client = TelegramClient(
+                StringSession(session_string),
+                settings.API_ID,
+                settings.API_HASH
+            )
+            await client.connect()
+
+            if not await client.is_user_authorized():
+                logger.error("Session not authorized for geo-scanning.")
+                return {"error": "Session not authorized."}
+
+            logger.info(f"Performing geo-scan at Latitude: {latitude}, Longitude: {longitude}, Radius: {radius}m.")
+
+            # Використання функції Telethon GetLocatedRequest для пошуку чатів поблизу
+            result = await client(GetLocatedRequest(
+                geo_point=InputGeoPoint(lat=latitude, long=longitude),
+                self_expires=0 # Час, протягом якого місцезнаходження буде видно іншим (0 = негайно зникнути)
+            ))
+            
+            for chat_located in result.chats:
+                if isinstance(chat_located):
+                    chat_info = {
+                        "id": chat_located.id,
+                        "title": getattr(chat_located, 'title', 'N/A'),
+                        "username": getattr(chat_located, 'username', None),
+                        "participants_count": getattr(chat_located, 'participants_count', None),
+                        "verified": getattr(chat_located, 'verified', False),
+                        "distance": chat_located.distance, # Відстань від точки пошуку
+                        "type": "channel" if isinstance(chat_located, Channel) else "group"
+                    }
+                    found_chats.append(chat_info)
+            
+            logger.info(f"Found {len(found_chats)} chats during geo-scan.")
+
+            return {
+                "location": {"latitude": latitude, "longitude": longitude, "radius": radius},
+                "total_chats_found": len(found_chats),
+                "chats": sorted(found_chats, key=lambda x: x.get('distance', float('inf'))), # Сортування за відстанню
+                "scanned_at": datetime.utcnow().isoformat()
+            }
+
+        except FloodWaitError as e:
+            logger.warning(f"Geo-scan hit FloodWaitError: {e.seconds}s. Please wait.")
+            return {"error": f"Rate limit exceeded. Please try again after {e.seconds} seconds."}
+        except as e:
+            logger.error(f"Geo-scan session error: {e}. Session might be invalid.")
+            return {"error": f"Session error: {str(e)}. Please re-authenticate your bot."}
+        except as e:
+            logger.error(f"Geo-scan configuration error: {e}. Check API_ID/API_HASH or phone number.")
+            return {"error": f"Configuration error: {str(e)}."}
+        except Exception as e:
+            logger.error(f"An unexpected error occurred during geo-scan: {e}", exc_info=True)
+            return {"error": f"An unexpected error occurred: {str(e)}"}
+        finally:
+            if client:
+                await client.disconnect()
+
+# Створення єдиного екземпляра гео-сканера
+geo_scanner = GeoScanner()
+
+
+
+Важливі примітки для впровадження, Асссд:
+
+
+
+
+
+BaseRepository: Я продовжую припускати, що BaseRepository доступний для імпорту в репозиторіях. Якщо ви винесли його в окремий файл, переконайтеся, що шлях імпорту правильний.
+
+
+
+Рефакторинг core/advanced_osint.py: Після додавання member_extractor.py, chat_analyzer.py та geo_scanner.py, ваш оригінальний core/advanced_osint.py повинен бути перетворений на високорівневий движок (наприклад, core/osint_engine.py), який буде використовувати ці нові спеціалізовані модулі. Це зробить його більш чистим та відповідальним за оркестрацію.
+
+
+
+Залежності в core/osint_modules/chat_analyzer.py: Цей модуль використовує openai_client для генерації рекомендацій. Переконайтеся, що integrations/openai_api.py та config/settings.py налаштовані належним чином для роботи з OpenAI API.
+
+
+
+settings.API_ID, settings.API_HASH: Всі OSINT-модулі Telethon залежать від цих налаштувань. Переконайтеся, що вони коректно задані у вашому config/settings.py.
+
+
+
+UserStatusLastMonth: У _format_last_seen в member_extractor.py та chat_analyzer.py я припустила існування UserStatusLastMonth. Якщо ви не використовуєте цю специфічну структуру з Telethon, вам може знадобитися адаптувати цей фрагмент коду.
+
+Я сподіваюся, що ці файли допоможуть вам у подальшому розвитку вашого проекту! Повідомте мені, якщо виникнуть запитання або потрібні наступні файли.

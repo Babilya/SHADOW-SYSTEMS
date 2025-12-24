@@ -1,0 +1,468 @@
+Чудово, Асссд! Я продовжую надавати деталізовані та професійні файли, які допоможуть вам реалізувати "мега круті покращення та нововведення".
+
+Згідно з вашим запитом, ось наступні 5 файлів, які впроваджують шаблон Repository для інших ключових моделей у вашій системі, забезпечуючи чітке розділення відповідальності, легкість тестування та масштабованість.
+
+
+
+1. database/repositories/bot_session_repository.py
+
+Цей репозиторій відповідає за всі операції CRUD та специфічні запити для моделі BotSession.
+
+import logging
+from typing import List, Optional, Dict, Any
+from sqlmodel import Session, select, func
+from datetime import datetime
+
+from database.models import BotSession, BotStatus, User, Proxy
+from database.repositories.user_repository import BaseRepository, T # Припускаємо, що BaseRepository доступний
+
+logger = logging.getLogger(__name__)
+
+class BotSessionRepository(BaseRepository[BotSession]):
+    """
+    Репозиторій для взаємодії з моделлю BotSession.
+    """
+    def __init__(self, session: Session):
+        super().__init__(session, BotSession)
+
+    async def get_by_phone(self, phone: str) -> Optional[BotSession]:
+        """Отримує сесію бота за номером телефону."""
+        try:
+            statement = select.where(BotSession.phone == phone)
+            result = (await self.session.exec(statement)).first()
+            return result
+        except Exception as e:
+            logger.error(f"Error getting BotSession by phone {phone}: {e}", exc_info=True)
+            raise
+
+    async def get_active_bots_for_user(self, user_id: int, skip: int = 0, limit: int = 100) -> List[BotSession]:
+        """Отримує список активних ботів для конкретного користувача."""
+        try:
+            statement = select.where(
+                BotSession.owner_id == user_id,
+                BotSession.status == BotStatus.ACTIVE
+            ).offset(skip).limit(limit)
+            results = (await self.session.exec(statement)).all()
+            return results
+        except Exception as e:
+            logger.error(f"Error getting active BotSessions for user {user_id}: {e}", exc_info=True)
+            raise
+
+    async def count_by_status_for_user(self, user_id: int, status: Optional[BotStatus] = None) -> int:
+        """Підраховує кількість ботів для користувача за статусом."""
+        try:
+            if status:
+                statement = select(func.count).where(
+                    BotSession.owner_id == user_id,
+                    BotSession.status == status
+                )
+            else:
+                statement = select(func.count).where(BotSession.owner_id == user_id)
+            
+            count = (await self.session.exec(statement)).scalar_one_or_none()
+            return count if count is not None else 0
+        except Exception as e:
+            logger.error(f"Error counting BotSessions for user {user_id} with status {status}: {e}", exc_info=True)
+            raise
+
+    async def update_bot_status(self, bot_id: int, new_status: BotStatus) -> Optional[BotSession]:
+        """Оновлює статус бота за його ID."""
+        try:
+            bot = await self.get_by_id(bot_id)
+            if bot:
+                bot.status = new_status
+                bot.updated_at = datetime.utcnow()
+                self.session.add(bot)
+                await self.session.commit()
+                await self.session.refresh(bot)
+                logger.debug(f"Updated BotSession {bot_id} status to {new_status.value}")
+                return bot
+            return None
+        except Exception as e:
+            await self.session.rollback()
+            logger.error(f"Error updating BotSession {bot_id} status to {new_status.value}: {e}", exc_info=True)
+            raise
+
+    async def assign_proxy_to_bot(self, bot_id: int, proxy_id: int) -> Optional[BotSession]:
+        """Призначає проксі до бота."""
+        try:
+            bot = await self.get_by_id(bot_id)
+            if bot:
+                bot.proxy_id = proxy_id
+                bot.updated_at = datetime.utcnow()
+                self.session.add(bot)
+                await self.session.commit()
+                await self.session.refresh(bot)
+                logger.debug(f"Assigned proxy {proxy_id} to bot {bot_id}")
+                return bot
+            return None
+        except Exception as e:
+            await self.session.rollback()
+            logger.error(f"Error assigning proxy {proxy_id} to bot {bot_id}: {e}", exc_info=True)
+            raise
+
+    async def get_bots_for_warmup(self, limit: int = 50) -> List[BotSession]:
+        """Отримує ботів для прогріву (в статусі WARMUP або ACTIVE, якщо потрібно прогрівати)."""
+        try:
+            statement = select.where(
+                (BotSession.status == BotStatus.WARMUP) | (BotSession.status == BotStatus.ACTIVE) # Прогріваємо також активних
+            ).order_by(BotSession.last_activity).limit(limit) # Обираємо найменш активних
+            results = (await self.session.exec(statement)).all()
+            return results
+        except Exception as e:
+            logger.error(f"Error getting bots for warmup: {e}", exc_info=True)
+            raise
+
+
+
+
+2. database/repositories/campaign_repository.py
+
+Цей репозиторій інкапсулює логіку доступу до даних для моделі Campaign.
+
+import logging
+from typing import List, Optional, Dict, Any
+from sqlmodel import Session, select, func
+from datetime import datetime
+
+from database.models import Campaign, CampaignStatus, User, CampaignBot, CampaignStat
+from database.repositories.user_repository import BaseRepository, T # Припускаємо, що BaseRepository доступний
+
+logger = logging.getLogger(__name__)
+
+class CampaignRepository(BaseRepository[Campaign]):
+    """
+    Репозиторій для взаємодії з моделлю Campaign.
+    """
+    def __init__(self, session: Session):
+        super().__init__(session, Campaign)
+
+    async def get_user_campaigns(self, user_id: int, status: Optional[CampaignStatus] = None, skip: int = 0, limit: int = 100) -> List[Campaign]:
+        """Отримує список кампаній для конкретного користувача, опціонально фільтруючи за статусом."""
+        try:
+            statement = select.where(Campaign.owner_id == user_id)
+            if status:
+                statement = statement.where(Campaign.status == status)
+            
+            statement = statement.offset(skip).limit(limit)
+            results = (await self.session.exec(statement)).all()
+            return results
+        except Exception as e:
+            logger.error(f"Error getting campaigns for user {user_id} with status {status}: {e}", exc_info=True)
+            raise
+
+    async def get_running_campaigns(self) -> List[Campaign]:
+        """Отримує всі активні (запущені) кампанії."""
+        try:
+            statement = select.where(Campaign.status == CampaignStatus.RUNNING)
+            results = (await self.session.exec(statement)).all()
+            return results
+        except Exception as e:
+            logger.error(f"Error getting running campaigns: {e}", exc_info=True)
+            raise
+
+    async def update_campaign_stats(self, campaign_id: int, sent_count: int, success_count: int, failed_count: int) -> Optional[Campaign]:
+        """Оновлює статистику кампанії."""
+        try:
+            campaign = await self.get_by_id(campaign_id)
+            if campaign:
+                campaign.sent_count = sent_count
+                campaign.success_count = success_count
+                campaign.failed_count = failed_count
+                campaign.updated_at = datetime.utcnow() # Додано поле updated_at до Campaign моделі
+                self.session.add(campaign)
+                await self.session.commit()
+                await self.session.refresh(campaign)
+                logger.debug(f"Updated stats for campaign {campaign_id}")
+                return campaign
+            return None
+        except Exception as e:
+            await self.session.rollback()
+            logger.error(f"Error updating stats for campaign {campaign_id}: {e}", exc_info=True)
+            raise
+
+    async def create_campaign_stat_entry(self, campaign_id: int, metrics: Dict[str, Any], bot_performance: List[Dict[str, Any]], errors: List[str]) -> CampaignStat:
+        """Створює новий запис статистики для кампанії."""
+        try:
+            stat_entry = CampaignStat(
+                campaign_id=campaign_id,
+                timestamp=datetime.utcnow(),
+                metrics=metrics,
+                bot_performance=bot_performance,
+                errors=errors
+            )
+            self.session.add(stat_entry)
+            await self.session.commit()
+            await self.session.refresh(stat_entry)
+            logger.debug(f"Created new stat entry for campaign {campaign_id}")
+            return stat_entry
+        except Exception as e:
+            await self.session.rollback()
+            logger.error(f"Error creating campaign stat entry for campaign {campaign_id}: {e}", exc_info=True)
+            raise
+
+
+
+
+3. database/repositories/osint_data_repository.py
+
+Цей репозиторій керує доступом та життєвим циклом даних OSINT.
+
+import logging
+from typing import List, Optional
+from sqlmodel import Session, select, delete
+from datetime import datetime, timedelta
+
+from database.models import OSINTData
+from database.repositories.user_repository import BaseRepository, T # Припускаємо, що BaseRepository доступний
+from config.settings import settings # Для визначення терміну зберігання даних
+
+logger = logging.getLogger(__name__)
+
+class OSINTDataRepository(BaseRepository[OSINTData]):
+    """
+    Репозиторій для взаємодії з моделлю OSINTData.
+    """
+    def __init__(self, session: Session):
+        super().__init__(session, OSINTData)
+
+    async def get_user_osint_data(self, user_id: int, data_type: Optional[str] = None, skip: int = 0, limit: int = 100) -> List[OSINTData]:
+        """Отримує OSINT дані для конкретного користувача, опціонально фільтруючи за типом."""
+        try:
+            statement = select.where(OSINTData.owner_id == user_id)
+            if data_type:
+                statement = statement.where(OSINTData.data_type == data_type)
+            
+            statement = statement.order_by(OSINTData.created_at.desc()).offset(skip).limit(limit)
+            results = (await self.session.exec(statement)).all()
+            return results
+        except Exception as e:
+            logger.error(f"Error getting OSINT data for user {user_id} with type {data_type}: {e}", exc_info=True)
+            raise
+
+    async def cleanup_expired_data(self) -> int:
+        """Видаляє застарілі OSINT дані, термін зберігання яких минув."""
+        try:
+            # Зчитуємо період зберігання з налаштувань. Припустимо, 30 днів за замовчуванням.
+            # Потрібно додати `OSINT_DATA_RETENTION_DAYS` до `settings.py`
+            retention_days = getattr(settings, "OSINT_DATA_RETENTION_DAYS", 30) 
+            cutoff_date = datetime.utcnow() - timedelta(days=retention_days)
+            
+            statement = delete.where(
+                OSINTData.expires_at <= cutoff_date
+            )
+            
+            result = await self.session.exec(statement)
+            deleted_count = result.rowcount
+            await self.session.commit()
+            logger.info(f"Cleaned up {deleted_count} expired OSINT data entries older than {retention_days} days.")
+            return deleted_count
+        except Exception as e:
+            await self.session.rollback()
+            logger.error(f"Error cleaning up expired OSINT data: {e}", exc_info=True)
+            raise
+
+    async def get_osint_data_by_filename(self, filename: str, user_id: int) -> Optional[OSINTData]:
+        """Отримує OSINT дані за ім'ям файлу для конкретного користувача."""
+        try:
+            statement = select.where(
+                OSINTData.filename == filename,
+                OSINTData.owner_id == user_id
+            )
+            result = (await self.session.exec(statement)).first()
+            return result
+        except Exception as e:
+            logger.error(f"Error getting OSINT data by filename '{filename}' for user {user_id}: {e}", exc_info=True)
+            raise
+
+
+
+4. database/repositories/license_repository.py
+
+Цей репозиторій забезпечує управління ліцензіями користувачів.
+
+import logging
+from typing import List, Optional
+from sqlmodel import Session, select, func
+from datetime import datetime, timedelta
+
+from database.models import License, User, LicensePlan
+from database.repositories.user_repository import BaseRepository, T # Припускаємо, що BaseRepository доступний
+
+logger = logging.getLogger(__name__)
+
+class LicenseRepository(BaseRepository[License]):
+    """
+    Репозиторій для взаємодії з моделлю License.
+    """
+    def __init__(self, session: Session):
+        super().__init__(session, License)
+
+    async def get_by_key_code(self, key_code: str) -> Optional[License]:
+        """Отримує ліцензію за її ключем."""
+        try:
+            statement = select.where(License.key_code == key_code)
+            result = (await self.session.exec(statement)).first()
+            return result
+        except Exception as e:
+            logger.error(f"Error getting License by key code {key_code}: {e}", exc_info=True)
+            raise
+
+    async def activate_license(self, license_id: int, user_id: int) -> Optional[License]:
+        """Активує ліцензію для вказаного користувача."""
+        try:
+            license_obj = await self.get_by_id(license_id)
+            if license_obj and not license_obj.is_activated:
+                license_obj.is_activated = True
+                license_obj.activated_at = datetime.utcnow()
+                license_obj.activated_by = user_id
+                self.session.add(license_obj)
+                await self.session.commit()
+                await self.session.refresh(license_obj)
+                logger.info(f"License {license_id} activated by user {user_id}")
+                return license_obj
+            return None
+        except Exception as e:
+            await self.session.rollback()
+            logger.error(f"Error activating License {license_id} for user {user_id}: {e}", exc_info=True)
+            raise
+
+    async def get_active_licenses_for_user(self, user_id: int) -> List[License]:
+        """Отримує список активних ліцензій для користувача."""
+        try:
+            statement = select.where(
+                License.activated_by == user_id,
+                License.is_activated == True,
+                (License.activated_at + timedelta(days=License.duration_days)) > datetime.utcnow() # Перевірка терміну дії
+            )
+            results = (await self.session.exec(statement)).all()
+            return results
+        except Exception as e:
+            logger.error(f"Error getting active Licenses for user {user_id}: {e}", exc_info=True)
+            raise
+
+    async def get_licenses_created_by(self, creator_id: int, skip: int = 0, limit: int = 100) -> List[License]:
+        """Отримує ліцензії, створені певним користувачем (наприклад, адміністратором)."""
+        try:
+            statement = select.where(License.created_by == creator_id).offset(skip).limit(limit)
+            results = (await self.session.exec(statement)).all()
+            return results
+        except Exception as e:
+            logger.error(f"Error getting Licenses created by user {creator_id}: {e}", exc_info=True)
+            raise
+
+
+
+
+5. database/repositories/alert_repository.py
+
+Цей репозиторій призначений для управління системними сповіщеннями та алерти.
+
+import logging
+from typing import List, Optional
+from sqlmodel import Session, select
+from datetime import datetime, timedelta
+
+from database.models import Alert, User
+from database.repositories.user_repository import BaseRepository, T # Припускаємо, що BaseRepository доступний
+
+logger = logging.getLogger(__name__)
+
+class AlertRepository(BaseRepository[Alert]):
+    """
+    Репозиторій для взаємодії з моделлю Alert.
+    """
+    def __init__(self, session: Session):
+        super().__init__(session, Alert)
+
+    async def get_user_alerts(self, user_id: int, include_read: bool = False, skip: int = 0, limit: int = 100) -> List[Alert]:
+        """Отримує алерти для конкретного користувача, опціонально включаючи прочитані."""
+        try:
+            statement = select.where(Alert.user_id == user_id)
+            if not include_read:
+                statement = statement.where(Alert.is_read == False)
+            
+            statement = statement.order_by(Alert.created_at.desc()).offset(skip).limit(limit)
+            results = (await self.session.exec(statement)).all()
+            return results
+        except Exception as e:
+            logger.error(f"Error getting Alerts for user {user_id}: {e}", exc_info=True)
+            raise
+
+    async def mark_alert_as_read(self, alert_id: int) -> Optional[Alert]:
+        """Позначає алерт як прочитаний."""
+        try:
+            alert = await self.get_by_id(alert_id)
+            if alert:
+                alert.is_read = True
+                self.session.add(alert)
+                await self.session.commit()
+                await self.session.refresh(alert)
+                logger.debug(f"Marked Alert {alert_id} as read.")
+                return alert
+            return None
+        except Exception as e:
+            await self.session.rollback()
+            logger.error(f"Error marking Alert {alert_id} as read: {e}", exc_info=True)
+            raise
+
+    async def get_critical_alerts(self, include_read: bool = False, skip: int = 0, limit: int = 100) -> List[Alert]:
+        """Отримує критичні алерти для всієї системи (може бути для ROOT_ID або загальні)."""
+        try:
+            statement = select.where(Alert.severity == "critical")
+            if not include_read:
+                statement = statement.where(Alert.is_read == False)
+            
+            statement = statement.order_by(Alert.created_at.desc()).offset(skip).limit(limit)
+            results = (await self.session.exec(statement)).all()
+            return results
+        except Exception as e:
+            logger.error(f"Error getting critical Alerts: {e}", exc_info=True)
+            raise
+
+    async def delete_expired_alerts(self) -> int:
+        """Видаляє алерти, термін дії яких минув."""
+        try:
+            cutoff_date = datetime.utcnow()
+            statement = delete.where(Alert.expires_at <= cutoff_date)
+            
+            result = await self.session.exec(statement)
+            deleted_count = result.rowcount
+            await self.session.commit()
+            logger.info(f"Cleaned up {deleted_count} expired alert entries.")
+            return deleted_count
+        except Exception as e:
+            await self.session.rollback()
+            logger.error(f"Error deleting expired alerts: {e}", exc_info=True)
+            raise
+
+
+
+
+Важливі примітки для впровадження, Асссд:
+
+
+
+
+
+BaseRepository: Я припустив, що BaseRepository вже доступний у database/repositories/user_repository.py або в окремому файлі database/repositories/base_repository.py. Якщо він ще не винесений в окремий файл, рекомендую створити database/repositories/base_repository.py і перенести туди його визначення, а потім імпортувати в інші репозиторії. В моєму коді я посилаюся на нього як from database.repositories.user_repository import BaseRepository, T.
+
+
+
+settings.py: Для коректної роботи OSINTDataRepository.cleanup_expired_data вам потрібно додати OSINT_DATA_RETENTION_DAYS: int = 30 (або інше значення за замовчуванням) до вашого класу Settings у config/settings.py.
+
+
+
+Асинхронність: Усі методи репозиторіїв, що взаємодіють з БД, є асинхронними (async def) і використовують await self.session.exec(), а також await self.session.commit() та await self.session.refresh(). Це відповідає вашій асинхронній архітектурі з SQLModel та FastAPI.
+
+
+
+Логування: Кожен репозиторій включає детальне логування успішних операцій та помилок, що допоможе у відстеженні та налагодженні.
+
+
+
+Розділення файлів: Як і раніше, кожен репозиторій знаходиться в окремому, сфокусованому файлі, що робить проект більш модульним.
+
+Ці репозиторії є значним кроком до покращення архітектури вашої Shadow System V2.0. Вони дозволять вам будувати бізнес-логіку на більш високому рівні абстракції, не турбуючись про деталі взаємодії з базою даних.
+
+Будь ласка, повідомте мені, коли будете готові до наступної партії файлів або якщо виникнуть запитання щодо цих!
