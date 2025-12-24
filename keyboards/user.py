@@ -3,29 +3,34 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 def main_menu() -> InlineKeyboardMarkup:
     """Головне меню з 2-3 кнопками в ряді"""
     return InlineKeyboardMarkup(inline_keyboard=[
-        # Рядок 1: 2 кнопки
+        # Рядок 1: Боти & OSINT
         [
-            InlineKeyboardButton(text="🤖 Botnet", callback_data="botnet_main"),
-            InlineKeyboardButton(text="🔍 OSINT", callback_data="osint_main")
+            InlineKeyboardButton(text="🤖 Боти", callback_data="my_bots"),
+            InlineKeyboardButton(text="🔍 OSINT", callback_data="osint_data")
         ],
-        # Рядок 2: 2 кнопки
+        # Рядок 2: Кампанії & Аналітика
         [
-            InlineKeyboardButton(text="📊 Аналітика", callback_data="analytics_main"),
-            InlineKeyboardButton(text="👥 Команда", callback_data="team_main")
+            InlineKeyboardButton(text="📝 Кампанії", callback_data="campaigns"),
+            InlineKeyboardButton(text="📊 Аналітика", callback_data="analytics_main")
         ],
-        # Рядок 3: 2 кнопки
+        # Рядок 3: Платежі & Баланс
+        [
+            InlineKeyboardButton(text="💳 Платежі", callback_data="payments_main"),
+            InlineKeyboardButton(text="💰 Баланс", callback_data="balance")
+        ],
+        # Рядок 4: Профіль & Налаштування
+        [
+            InlineKeyboardButton(text="👤 Профіль", callback_data="profile"),
+            InlineKeyboardButton(text="⚙️ Налаштування", callback_data="settings_main")
+        ],
+        # Рядок 5: Текстовки & Довідка
+        [
+            InlineKeyboardButton(text="📝 Текстовки", callback_data="texting"),
+            InlineKeyboardButton(text="📚 Довідка", callback_data="help")
+        ],
+        # Рядок 6: Підписки & Онбординг
         [
             InlineKeyboardButton(text="📦 Підписки", callback_data="subscription_main"),
-            InlineKeyboardButton(text="💳 Платежі", callback_data="payments_main")
-        ],
-        # Рядок 4: 2 кнопки
-        [
-            InlineKeyboardButton(text="⚙️ Налаштування", callback_data="settings_main"),
-            InlineKeyboardButton(text="📝 Текстовки", callback_data="texting")
-        ],
-        # Рядок 5: 2 кнопки
-        [
-            InlineKeyboardButton(text="📚 Довідка", callback_data="help"),
             InlineKeyboardButton(text="🎯 Онбординг", callback_data="onboarding_start")
         ],
     ])
