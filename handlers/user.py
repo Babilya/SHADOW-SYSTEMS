@@ -164,3 +164,43 @@ async def help_callback(query: CallbackQuery):
     from handlers.help import help_menu
     await help_menu(query.message)
 
+@user_router.callback_query(F.data == "profile")
+async def profile_callback(query: CallbackQuery):
+    await query.answer()
+    await query.message.edit_text("👤 <b>Профіль</b>\n\nID: 6838247512\nІм'я: Admin\nРоль: Власник\nПлан: VIP Elite\n\nСтатистика:\n• Боти: 150\n• Розсилок: 2,345\n• OSINT запитів: 890\n• Баланс: ₴25,480", parse_mode="HTML")
+
+@user_router.callback_query(F.data == "my_bots")
+async def my_bots_callback(query: CallbackQuery):
+    await query.answer()
+    from handlers.botnet import botnet_description, botnet_kb
+    await query.message.edit_text(botnet_description(), reply_markup=botnet_kb(), parse_mode="HTML")
+
+@user_router.callback_query(F.data == "osint_data")
+async def osint_data_callback(query: CallbackQuery):
+    await query.answer()
+    from handlers.osint import osint_description, osint_kb
+    await query.message.edit_text(osint_description(), reply_markup=osint_kb(), parse_mode="HTML")
+
+@user_router.callback_query(F.data == "campaigns")
+async def campaigns_callback(query: CallbackQuery):
+    await query.answer()
+    from handlers.texting import texting_kb
+    await query.message.edit_text("📝 <b>Кампанії</b>\n\nВсього кампаній: 45\nАктивних: 12\nПриклад результатів:\n• Промо: CTR 45%, конверсія 12%\n• Привітання: Engagement 78%", reply_markup=texting_kb(), parse_mode="HTML")
+
+@user_router.callback_query(F.data == "analytics_main")
+async def analytics_main_callback(query: CallbackQuery):
+    await query.answer()
+    from handlers.analytics import analytics_description, analytics_kb
+    await query.message.edit_text(analytics_description(), reply_markup=analytics_kb(), parse_mode="HTML")
+
+@user_router.callback_query(F.data == "subscription_main")
+async def subscription_main_callback(query: CallbackQuery):
+    await query.answer()
+    from handlers.subscriptions import subscriptions_description, subscriptions_kb
+    await query.message.edit_text(subscriptions_description(), reply_markup=subscriptions_kb(), parse_mode="HTML")
+
+@user_router.callback_query(F.data == "onboarding_start")
+async def onboarding_start_callback(query: CallbackQuery):
+    await query.answer()
+    await query.message.edit_text("🎯 <b>Онбординг - Навчання новачків</b>\n\n📍 Рівень 1: Основи\n📍 Рівень 2: Практика\n📍 Рівень 3: Продвинуті функції\n\nПрогрес: 0%\n\nРозпочати навчання →", parse_mode="HTML")
+
