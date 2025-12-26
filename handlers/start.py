@@ -43,3 +43,19 @@ async def start_handler(message: Message):
         reply_markup=get_menu_by_role(role),
         parse_mode="HTML"
     )
+
+@router.callback_query(F.data == "user_menu")
+async def user_menu_callback(callback: CallbackQuery):
+    from services.user_service import user_service
+    from core.role_constants import UserRole
+    from keyboards.role_menus import get_description_by_role, get_menu_by_role
+    
+    user = user_service.get_or_create_user(callback.from_user.id, callback.from_user.username, callback.from_user.first_name)
+    role = user.role if user else UserRole.GUEST
+    
+    await callback.message.edit_text(
+        get_description_by_role(role),
+        reply_markup=get_menu_by_role(role),
+        parse_mode="HTML"
+    )
+    await callback.answer()
