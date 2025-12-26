@@ -128,21 +128,6 @@ async def submit_application_callback(query: CallbackQuery, **kwargs):
         parse_mode="HTML"
     )
 
-@dp.callback_query(F.data == "enter_key")
-async def enter_key_callback(query: CallbackQuery, **kwargs):
-    await query.answer()
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_start")]
-    ])
-    await query.message.edit_text(
-        "🔑 <b>ВВЕДЕННЯ КЛЮЧА</b>\n\n"
-        "Надішліть ваш ключ доступу у форматі:\n"
-        "<code>SHADOW-XXXX-XXXX</code>\n\n"
-        "Ключ видається адміністратором після підтвердження заявки.",
-        reply_markup=kb,
-        parse_mode="HTML"
-    )
 
 @dp.callback_query(F.data == "support")
 async def support_callback(query: CallbackQuery, **kwargs):

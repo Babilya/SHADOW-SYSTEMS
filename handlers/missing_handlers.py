@@ -18,20 +18,125 @@ async def enter_key(query: CallbackQuery, state: FSMContext):
         [InlineKeyboardButton(text="❌ Скасувати", callback_data="back_to_menu")]
     ])
     await query.message.edit_text(
-        "🔑 <b>ВВЕДЕННЯ КЛЮЧА</b>\n\n"
-        "Введіть ваш ліцензійний ключ у форматі:\n"
-        "<code>SHADOW-XXXX-XXXX</code>",
+        """<b>🔐 ЦЕНТР АВТОРИЗАЦІЇ</b>
+
+Введіть ваш унікальний код доступу:
+
+<b>🔑 ТИПИ КОДІВ:</b>
+├ <b>Ключ Ліцензії</b> (SHADOW-XXXX) — для Лідерів
+│  Активує проект та повний функціонал
+│
+└ <b>Код Запрошення</b> (INV-XXXX) — для Менеджерів
+   Надає доступ до проекту керівника
+
+Введіть ваш код:""",
         reply_markup=kb, parse_mode="HTML"
     )
     await query.answer()
 
 @missing_router.message(KeyStates.waiting_key)
 async def process_key(message: Message, state: FSMContext):
+    from core.key_generator import (
+        validate_license_key, activate_license_key,
+        validate_invite_code, use_invite_code,
+        license_keys_storage
+    )
+    from services.user_service import user_service
+    from database.models import UserRole
+    
     key = message.text.strip().upper()
-    if key.startswith("SHADOW-") and len(key) == 16:
-        await message.answer("✅ Ключ активовано! Ласкаво просимо.")
+    user_id = message.from_user.id
+    
+    if key.startswith("SHADOW-"):
+        license_data = validate_license_key(key)
+        if license_data:
+            activate_license_key(key, user_id)
+            user_service.set_user_role(user_id, UserRole.LEADER)
+            
+            tariff = license_data.get("tariff", "standard").upper()
+            days = license_data.get("days", 30)
+            
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🚀 Почати роботу", callback_data="back_to_menu")]
+            ])
+            
+            await message.answer(
+                f"""<b>✅ ЛІЦЕНЗІЮ АКТИВОВАНО!</b>
+
+<b>🔑 Ключ:</b> <code>{key}</code>
+<b>💎 Тариф:</b> {tariff}
+<b>📅 Термін:</b> {days} днів
+
+<b>👑 Ваша роль:</b> LEADER (Лідер проекту)
+
+<b>✅ Доступні функції:</b>
+├ 🤖 Управління ботами
+├ 📧 Створення кампаній
+├ 🔍 OSINT модуль
+├ 👥 Управління командою
+└ 📊 Повна аналітика
+
+<b>Ласкаво просимо до Shadow System!</b> 🖤""",
+                reply_markup=kb, parse_mode="HTML"
+            )
+        else:
+            valid_keys = [k for k, v in license_keys_storage.items() if not v.get("activated")]
+            if valid_keys:
+                await message.answer(f"❌ Ключ вже використаний або недійсний.\n\nДоступні ключі: {len(valid_keys)}")
+            else:
+                await message.answer("❌ Ключ не знайдено або вже використаний.\n\nЗверніться до адміністратора для отримання нового ключа.")
+    
+    elif key.startswith("INV-"):
+        invite_data = validate_invite_code(key)
+        if invite_data:
+            use_invite_code(key, user_id)
+            user_service.set_user_role(user_id, UserRole.MANAGER)
+            
+            leader_id = invite_data.get("leader_id")
+            
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🚀 Почати роботу", callback_data="back_to_menu")]
+            ])
+            
+            await message.answer(
+                f"""<b>✅ КОД ЗАПРОШЕННЯ АКТИВОВАНО!</b>
+
+<b>🔑 Код:</b> <code>{key}</code>
+<b>👤 Ваша роль:</b> MANAGER (Менеджер)
+
+<b>✅ Доступні функції:</b>
+├ 📧 Робота з кампаніями
+├ 📊 Перегляд аналітики
+└ 🤖 Управління ботами
+
+<b>Ви приєднались до проекту лідера!</b>
+Очікуйте подальших інструкцій від керівника.""",
+                reply_markup=kb, parse_mode="HTML"
+            )
+            
+            try:
+                await message.bot.send_message(
+                    leader_id,
+                    f"<b>👥 НОВИЙ МЕНЕДЖЕР!</b>\n\n"
+                    f"@{message.from_user.username or 'user'} приєднався до вашого проекту\n"
+                    f"<b>Код:</b> <code>{key}</code>",
+                    parse_mode="HTML"
+                )
+            except:
+                pass
+        else:
+            await message.answer("❌ Код запрошення не знайдено або вже використаний.\n\nЗверніться до вашого лідера для отримання нового коду.")
+    
     else:
-        await message.answer("❌ Невірний формат ключа. Спробуйте ще раз.")
+        await message.answer(
+            "❌ <b>Невірний формат коду</b>\n\n"
+            "Очікуваний формат:\n"
+            "• SHADOW-XXXX-XXXX (ліцензія)\n"
+            "• INV-XXXX-XXXX (запрошення)\n\n"
+            "Перевірте код та спробуйте ще раз.",
+            parse_mode="HTML"
+        )
+    
     await state.clear()
 
 @missing_router.callback_query(F.data == "balance_view")
