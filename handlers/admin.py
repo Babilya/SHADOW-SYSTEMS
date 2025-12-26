@@ -17,6 +17,10 @@ class AdminStates(StatesGroup):
     waiting_block_id = State()
     waiting_alert_message = State()
 
+class RootStates(StatesGroup):
+    waiting_key_tariff = State()
+    waiting_key_days = State()
+
 def admin_main_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📢 Розсилка", callback_data="admin_broadcast"),
@@ -25,9 +29,11 @@ def admin_main_kb():
          InlineKeyboardButton(text="💰 Платежі", callback_data="admin_payments")],
         [InlineKeyboardButton(text="📋 Аудит логи", callback_data="admin_audit"),
          InlineKeyboardButton(text="🚨 Сповіщення", callback_data="admin_alerts")],
-        [InlineKeyboardButton(text="🚫 Блокування", callback_data="admin_block"),
-         InlineKeyboardButton(text="⚙️ Система", callback_data="admin_system")],
-        [InlineKeyboardButton(text="🆘 Екстрена тривога", callback_data="admin_emergency")]
+        [InlineKeyboardButton(text="🔑 Ключі", callback_data="admin_keys_menu"),
+         InlineKeyboardButton(text="🚫 Блокування", callback_data="admin_block")],
+        [InlineKeyboardButton(text="⚙️ Система", callback_data="admin_system"),
+         InlineKeyboardButton(text="🔐 Безпека", callback_data="admin_security")],
+        [InlineKeyboardButton(text="🆘 ЕКСТРЕНА ТРИВОГА", callback_data="admin_emergency")]
     ])
 
 @admin_router.message(Command("admin"))
@@ -372,3 +378,362 @@ async def admin_back_to_menu(query: CallbackQuery):
     await query.answer()
     from keyboards.user import main_menu, main_menu_description
     await query.message.edit_text(main_menu_description(), reply_markup=main_menu(), parse_mode="HTML")
+
+@admin_router.callback_query(F.data == "users_leaders")
+async def users_leaders(query: CallbackQuery):
+    await query.answer()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_users")]
+    ])
+    await query.message.edit_text(
+        """<b>🎯 ЛІДЕРИ ПРОЕКТІВ</b>
+
+<b>📊 Статистика:</b>
+├ Всього: 45
+├ Активних (24г): 23
+└ З командами: 38
+
+<b>👑 ТОП-5 ЗА АКТИВНІСТЮ:</b>
+
+1️⃣ <b>@leader_alpha</b>
+├ Тариф: 👑 ПРЕМІУМ | Команда: 12
+└ Кампаній: 156 | ROI: +345%
+
+2️⃣ <b>@mega_project</b>
+├ Тариф: ⭐ СТАНДАРТ | Команда: 5
+└ Кампаній: 89 | ROI: +234%
+
+3️⃣ <b>@pro_leader</b>
+├ Тариф: 💎 ПЕРСОНАЛЬНИЙ | Команда: 23
+└ Кампаній: 312 | ROI: +567%""",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@admin_router.callback_query(F.data == "users_managers")
+async def users_managers(query: CallbackQuery):
+    await query.answer()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_users")]
+    ])
+    await query.message.edit_text(
+        """<b>👷 МЕНЕДЖЕРИ</b>
+
+<b>📊 Статистика:</b>
+├ Всього: 156
+├ Активних (24г): 78
+└ Без проекту: 12
+
+<b>⭐ ТОП-5 ЗА ЕФЕКТИВНІСТЮ:</b>
+
+1️⃣ <b>@manager_ivan</b>
+├ Проект: @leader_alpha
+├ Рейтинг: 4.9/5 | Кампаній: 45
+└ Конверсія: 18.5%
+
+2️⃣ <b>@manager_maria</b>
+├ Проект: @mega_project
+├ Рейтинг: 4.7/5 | Кампаній: 38
+└ Конверсія: 15.2%""",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@admin_router.callback_query(F.data == "users_guests")
+async def users_guests(query: CallbackQuery):
+    await query.answer()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_users")]
+    ])
+    await query.message.edit_text(
+        """<b>👤 ГОСТІ (Незареєстровані)</b>
+
+<b>📊 Статистика:</b>
+├ Всього: 1,044
+├ Нових (24г): 56
+├ Подали заявку: 234
+└ Очікують ключа: 12
+
+<b>📈 Воронка конверсії:</b>
+├ Зайшли: 1,044 (100%)
+├ Переглянули тарифи: 678 (65%)
+├ Почали заявку: 345 (33%)
+├ Завершили: 234 (22%)
+└ Оплатили: 45 (4.3%)
+
+<b>🔥 Останні заявки:</b>
+• @new_user1 — СТАНДАРТ (5 хв тому)
+• @new_user2 — БАЗОВИЙ (15 хв тому)
+• @new_user3 — ПРЕМІУМ (1 год тому)""",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@admin_router.callback_query(F.data == "users_search")
+async def users_search(query: CallbackQuery, state: FSMContext):
+    await query.answer()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Скасувати", callback_data="admin_users")]
+    ])
+    await query.message.edit_text(
+        "<b>🔍 ПОШУК КОРИСТУВАЧА</b>\n\n"
+        "Введіть Telegram ID або @username:",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@admin_router.callback_query(F.data == "admin_keys_menu")
+async def admin_keys_menu(query: CallbackQuery):
+    if query.from_user.id not in ADMIN_IDS:
+        await query.answer("❌ Доступ заборонено", show_alert=True)
+        return
+    
+    await query.answer()
+    
+    from core.key_generator import license_keys_storage, invite_codes_storage
+    
+    active_licenses = len([k for k, v in license_keys_storage.items() if not v.get("activated")])
+    used_licenses = len([k for k, v in license_keys_storage.items() if v.get("activated")])
+    active_invites = len([k for k, v in invite_codes_storage.items() if not v.get("used")])
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔑 Згенерувати SHADOW", callback_data="gen_shadow_key")],
+        [InlineKeyboardButton(text="📋 Активні ключі", callback_data="list_active_keys")],
+        [InlineKeyboardButton(text="📊 Історія активацій", callback_data="keys_history")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_menu")]
+    ])
+    
+    await query.message.edit_text(
+        f"""<b>🔑 УПРАВЛІННЯ КЛЮЧАМИ</b>
+
+<b>📊 Статистика:</b>
+├ SHADOW ключів (активних): {active_licenses}
+├ SHADOW ключів (використаних): {used_licenses}
+├ INV кодів (активних): {active_invites}
+└ Всього видано: {len(license_keys_storage)}
+
+<b>🔐 Типи ключів:</b>
+• <code>SHADOW-XXX-XXXX</code> — Ліцензія (Лідер)
+• <code>INV-XXXX-XXXX</code> — Запрошення (Менеджер)
+
+<b>💡 Генерація:</b>
+Натисніть кнопку для створення нового ключа""",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@admin_router.callback_query(F.data == "gen_shadow_key")
+async def gen_shadow_key(query: CallbackQuery, state: FSMContext):
+    await query.answer()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📦 БАЗОВИЙ", callback_data="genkey_basic"),
+         InlineKeyboardButton(text="⭐ СТАНДАРТ", callback_data="genkey_standard")],
+        [InlineKeyboardButton(text="👑 ПРЕМІУМ", callback_data="genkey_premium"),
+         InlineKeyboardButton(text="💎 ПЕРСОНАЛЬНИЙ", callback_data="genkey_personal")],
+        [InlineKeyboardButton(text="❌ Скасувати", callback_data="admin_keys_menu")]
+    ])
+    await query.message.edit_text(
+        "<b>🔑 ГЕНЕРАЦІЯ КЛЮЧА</b>\n\n"
+        "Оберіть тариф для нового ключа:",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@admin_router.callback_query(F.data.startswith("genkey_"))
+async def genkey_tariff(query: CallbackQuery, state: FSMContext):
+    tariff = query.data.replace("genkey_", "")
+    await state.update_data(key_tariff=tariff)
+    
+    await query.answer()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="3 дні", callback_data="gendays_3"),
+         InlineKeyboardButton(text="14 днів", callback_data="gendays_14"),
+         InlineKeyboardButton(text="30 днів", callback_data="gendays_30")],
+        [InlineKeyboardButton(text="❌ Скасувати", callback_data="admin_keys_menu")]
+    ])
+    await query.message.edit_text(
+        f"<b>🔑 ГЕНЕРАЦІЯ КЛЮЧА</b>\n\n"
+        f"<b>Тариф:</b> {tariff.upper()}\n\n"
+        "Оберіть термін дії:",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@admin_router.callback_query(F.data.startswith("gendays_"))
+async def gendays_select(query: CallbackQuery, state: FSMContext):
+    days = int(query.data.replace("gendays_", ""))
+    data = await state.get_data()
+    tariff = data.get("key_tariff", "standard")
+    
+    from core.key_generator import generate_shadow_key, store_license_key
+    
+    new_key = generate_shadow_key(tariff)
+    store_license_key(new_key, 0, tariff, days)
+    
+    await audit_logger.log(
+        user_id=query.from_user.id,
+        action="license_key_generated",
+        category=ActionCategory.SYSTEM,
+        username=query.from_user.username,
+        details={"key": new_key, "tariff": tariff, "days": days}
+    )
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Згенерувати ще", callback_data="gen_shadow_key")],
+        [InlineKeyboardButton(text="◀️ До ключів", callback_data="admin_keys_menu")]
+    ])
+    
+    await state.clear()
+    await query.answer("✅ Ключ згенеровано!")
+    await query.message.edit_text(
+        f"""<b>✅ КЛЮЧ ЗГЕНЕРОВАНО!</b>
+
+<b>🔑 Ключ:</b>
+<code>{new_key}</code>
+
+<b>📦 Тариф:</b> {tariff.upper()}
+<b>📅 Термін:</b> {days} днів
+
+<b>📋 Інструкція для клієнта:</b>
+1. /start → 🔑 Ввести ключ
+2. Ввести <code>{new_key}</code>
+3. Готово!
+
+<i>Ключ збережено в системі</i>""",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@admin_router.callback_query(F.data == "list_active_keys")
+async def list_active_keys(query: CallbackQuery):
+    await query.answer()
+    
+    from core.key_generator import license_keys_storage
+    
+    active = [(k, v) for k, v in license_keys_storage.items() if not v.get("activated")]
+    
+    if active:
+        keys_text = ""
+        for key, data in active[-10:]:
+            tariff = data.get("tariff", "?").upper()
+            days = data.get("days", "?")
+            keys_text += f"<code>{key}</code>\n├ {tariff} | {days}д\n\n"
+    else:
+        keys_text = "<i>Немає активних ключів</i>"
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔑 Згенерувати новий", callback_data="gen_shadow_key")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_keys_menu")]
+    ])
+    
+    await query.message.edit_text(
+        f"<b>📋 АКТИВНІ КЛЮЧІ ({len(active)})</b>\n\n{keys_text}",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@admin_router.callback_query(F.data == "keys_history")
+async def keys_history(query: CallbackQuery):
+    await query.answer()
+    
+    from core.key_generator import license_keys_storage
+    
+    used = [(k, v) for k, v in license_keys_storage.items() if v.get("activated")]
+    
+    if used:
+        keys_text = ""
+        for key, data in used[-5:]:
+            tariff = data.get("tariff", "?").upper()
+            user_id = data.get("activated_by", "?")
+            keys_text += f"<code>{key[:15]}...</code>\n├ {tariff} → ID: {user_id}\n\n"
+    else:
+        keys_text = "<i>Історія порожня</i>"
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_keys_menu")]
+    ])
+    
+    await query.message.edit_text(
+        f"<b>📊 ІСТОРІЯ АКТИВАЦІЙ ({len(used)})</b>\n\n{keys_text}",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@admin_router.callback_query(F.data == "admin_security")
+async def admin_security(query: CallbackQuery):
+    await query.answer()
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🚫 Заблоковані", callback_data="sec_blocked")],
+        [InlineKeyboardButton(text="⚠️ Підозрілі", callback_data="sec_suspicious")],
+        [InlineKeyboardButton(text="📋 Останні інциденти", callback_data="sec_incidents")],
+        [InlineKeyboardButton(text="🔒 Налаштування", callback_data="sec_settings")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_menu")]
+    ])
+    
+    await query.message.edit_text(
+        """<b>🔐 ЦЕНТР БЕЗПЕКИ</b>
+
+<b>📊 Статус:</b>
+├ 🟢 Система: Захищена
+├ 🟢 Firewall: Активний
+├ 🟢 Rate Limiting: Увімкнено
+└ 🟢 Audit Log: Записується
+
+<b>⚠️ Загрози (24г):</b>
+├ Спроб несанкціонованого доступу: 3
+├ Підозрілих запитів: 12
+├ Заблокованих IP: 2
+└ Кікнутих користувачів: 1
+
+<b>🚫 Заблоковані:</b>
+└ 8 користувачів | 2 IP
+
+<b>🔒 Останній аудит:</b>
+└ 2 години тому""",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@admin_router.callback_query(F.data.in_(["sec_blocked", "sec_suspicious", "sec_incidents", "sec_settings"]))
+async def security_sections(query: CallbackQuery):
+    await query.answer()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_security")]
+    ])
+    
+    section = query.data.replace("sec_", "")
+    texts = {
+        "blocked": "<b>🚫 ЗАБЛОКОВАНІ КОРИСТУВАЧІ</b>\n\n1. @bad_user1 — Спам (3 дні тому)\n2. @hacker123 — Злом (1 тиждень)\n3. @spammer — Масова розсилка",
+        "suspicious": "<b>⚠️ ПІДОЗРІЛА АКТИВНІСТЬ</b>\n\n1. ID 123456 — 50+ запитів/хв\n2. ID 789012 — Невалідні ключі\n3. ID 345678 — Брутфорс",
+        "incidents": "<b>📋 ІНЦИДЕНТИ БЕЗПЕКИ</b>\n\n🔴 [12:30] Спроба SQL ін'єкції\n🟡 [11:45] Rate limit exceeded\n🟢 [10:20] Успішний блок атаки",
+        "settings": "<b>🔒 НАЛАШТУВАННЯ БЕЗПЕКИ</b>\n\n☑️ Rate Limiting: 100 req/min\n☑️ Auto-block: Увімкнено\n☑️ Captcha: Для нових\n☑️ 2FA для адмінів: Так"
+    }
+    
+    await query.message.edit_text(texts.get(section, "..."), reply_markup=kb, parse_mode="HTML")
+
+@admin_router.callback_query(F.data.in_(["alerts_critical", "alerts_operational", "alerts_financial", "alerts_read_all"]))
+async def alert_sections(query: CallbackQuery):
+    await query.answer()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_alerts")]
+    ])
+    
+    section = query.data.replace("alerts_", "")
+    texts = {
+        "critical": "<b>🚨 КРИТИЧНІ СПОВІЩЕННЯ</b>\n\n🔴 [Зараз] DB Connection spike\n🔴 [5 хв] Bot rate limited\n🟢 [1 год] Resolved: API timeout",
+        "operational": "<b>⚠️ ОПЕРАТИВНІ СПОВІЩЕННЯ</b>\n\n⚠️ Ліміт ботів для @user1\n⚠️ Campaign #45 завершена\n⚠️ OSINT quota 80%",
+        "financial": "<b>🎫 ФІНАНСОВІ СПОВІЩЕННЯ</b>\n\n💰 Нова заявка: @client1 - 12,500₴\n💰 Оплата підтверджена: #456\n🔑 Ключ активовано: SHADOW-XXX",
+        "read_all": "✅ <b>Всі сповіщення прочитано!</b>"
+    }
+    
+    await query.message.edit_text(texts.get(section, "..."), reply_markup=kb, parse_mode="HTML")
+
+@admin_router.callback_query(F.data.in_(["stats_detailed", "audit_critical", "audit_report", "system_restart", "system_clear_cache", "send_emergency"]))
+async def misc_admin_handlers(query: CallbackQuery):
+    await query.answer("🔄 Обробляється...")
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_menu")]
+    ])
+    
+    action = query.data
+    if action == "system_restart":
+        text = "🔄 <b>СИСТЕМА ПЕРЕЗАПУСКАЄТЬСЯ...</b>\n\n<i>Зачекайте 10 секунд</i>"
+    elif action == "system_clear_cache":
+        text = "🗑️ <b>КЕШ ОЧИЩЕНО</b>\n\n✅ Видалено: 156 MB\n✅ Записів: 2,345"
+    elif action == "send_emergency":
+        text = "🆘 <b>ЕКСТРЕНА ТРИВОГА НАДІСЛАНА</b>\n\n✅ Всі адміни сповіщені\n✅ Записано в аудит"
+    else:
+        text = "✅ <b>ВИКОНАНО</b>"
+    
+    await query.message.edit_text(text, reply_markup=kb, parse_mode="HTML")

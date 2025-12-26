@@ -575,6 +575,7 @@ async def admin_send_requisites(query: CallbackQuery):
 async def admin_payment_received(query: CallbackQuery):
     from config import ADMIN_IDS
     from core.encryption import encryption_manager
+    from core.key_generator import generate_shadow_key, store_license_key
     
     if query.from_user.id not in ADMIN_IDS:
         await query.answer("❌ Доступ заборонено", show_alert=True)
@@ -586,7 +587,8 @@ async def admin_payment_received(query: CallbackQuery):
     days = int(parts[4])
     pkg = PACKAGES.get(pkg_key, {})
     
-    license_key = encryption_manager.generate_secure_key("SHADOW")
+    license_key = generate_shadow_key(pkg_key)
+    store_license_key(license_key, user_id, pkg_key, days)
     
     key_text = f"""✅ <b>ОПЛАТА ПІДТВЕРДЖЕНА!</b>
 

@@ -1,274 +1,42 @@
 # Shadow System v2.0
 
-## 📋 Огляд
-Професійна платформа для автоматизації Telegram-маркетингу з функціоналом для управління ботнетом, розсилками, OSINT розвідкою та командою.
+## Overview
+Shadow System is a professional platform designed for automating Telegram marketing. It provides comprehensive functionality for managing botnets, mass mailings, OSINT (Open-Source Intelligence) reconnaissance, and team collaboration. Its purpose is to control over 1000 Telegram bots simultaneously, offer a CRM system for teams, provide advanced OSINT tools, implement a robust tariff and authorization system, and ensure complete isolation of user projects.
 
-## 🎯 Мета проекту
-- Керування 1000+ Telegram ботів одночасно
-- CRM система для команди
-- OSINT інструменти для аналізу
-- Система тарифування та авторизації
-- Повна ізоляція проектів користувачів
+## User Preferences
+The user prefers a concise and streamlined approach to project information. They prioritize clear, high-level summaries over granular implementation details. The user prefers that all changelogs and date-wise entries be removed to avoid context pollution. When interacting with the codebase, the user wants the agent to focus on core architectural decisions and consolidate redundant information. The user expects the agent to remove all update logs.
 
-## 📁 Структура проекту
-```
-├── config/              # Налаштування системи
-├── database/            # Моделі та CRUD операції
-├── handlers/            # Обробники Telegram
-├── keyboards/           # Клавіатури та меню
-├── core/               # Ядро системи
-│   ├── roles.py        # Система ролей
-│   ├── campaign_manager.py  # Менеджер кампаній
-│   ├── scheduler.py    # Планувальник задач
-│   ├── audit_logger.py # Аудит логування
-│   ├── alerts.py       # Система сповіщень
-│   ├── ai_service.py   # AI аналітика та генерація
-│   └── osint_tools/    # OSINT інструменти
-│       ├── telegram_analyzer.py
-│       ├── dns_whois.py
-│       ├── image_analyzer.py
-│       ├── social_media.py
-│       └── aggregator.py
-├── middlewares/        # Middleware компоненти
-│   └── role_middleware.py  # Перевірка ролей
-├── services/           # Сервіси
-│   └── user_service.py # Управління користувачами
-├── utils/              # Допоміжні функції
-├── bot.py              # Точка входу
-└── requirements.txt    # Залежності
-```
+## System Architecture
+The system is built around a modular architecture with distinct components for configuration, database interactions, Telegram handlers, core functionalities, middlewares, and services.
 
-## 🔑 Основні компоненти
+### Core Architectural Decisions:
+- **Role-Based Access Control (RBAC):** A sophisticated role system (ROOT/ADMIN, LEADER, MANAGER, GUEST) dictates access and functionalities, ensuring secure and segmented operations.
+- **Project Isolation:** Each leader's project is isolated, managing its own bots, managers, and campaigns, ensuring data integrity and security.
+- **State Management:** Utilizes FSM (Finite State Machine) for managing user interactions, particularly for registration, application processing, and manager authorization.
+- **Asynchronous Operations:** Built with `aiogram 3.3` and `asyncpg` for efficient, non-blocking operations, crucial for managing a large number of Telegram bots.
+- **Security-First Design:** Features unique access keys, Telegram ID binding, project isolation, comprehensive audit logging, rate limiting, and an Emergency Router for critical system control.
+- **Dynamic Configuration:** A CMS Configurator allows dynamic modification of UI elements, welcome texts, and banners via an admin panel.
 
-### Тарифи (Оновлено 2025-12-26)
-| Тариф | Функціонал | Вартість |
-|---|---|---|
-| БАЗОВИЙ | До 100 ботів, базовий OSINT, 1 менеджер | 4 200 ₴/міс |
-| СТАНДАРТ | До 500 ботів, масові операції, аналітика | 12 500 ₴/міс |
-| ПРЕМІУМ | До 5000 ботів, глибокий OSINT, анти-детект | 62 500 ₴/міс |
-| ПЕРСОНАЛЬНИЙ | Безлімітні операції, кастомні модулі | Від 100 000 ₴/міс |
+### UI/UX Decisions:
+- **Intuitive Telegram Bot Interface:** All interactions are handled within Telegram, leveraging keyboards and menus for navigation.
+- **Role-Specific Menus:** Different menus are presented based on the user's role to provide a tailored experience and prevent unauthorized access.
 
-### Ролі користувачів (Оновлена ієрархія)
-- **👑 ROOT/ADMIN**: Абсолютний контроль над системою, аудит-логи, зупинка кампаній
-- **LEADER**: Керування групою менеджерів, генерація ліцензійних ключів
-- **MANAGER**: Оперативний виконавець - розсилки, OSINT, керування ботнетом
-- **GUEST**: Перегляд тарифів та подача заявок
+### Feature Specifications:
+- **Botnet Management:** Control and operation of numerous Telegram bots for various marketing activities.
+- **Campaign Management:** Creation and execution of different types of mailing campaigns (broadcast, targeted, drip, sequential) with status tracking and statistics.
+- **OSINT Tools:** Integrated modules for Telegram analysis, DNS/WHOIS lookups, image metadata analysis, and social media reconnaissance, with an aggregator for comprehensive reports.
+- **CRM for Teams:** Features for managing managers, generating invite codes, and tracking team activities.
+- **Tariffing and Authorization:** A multi-tiered tariff system with unique SHADOW keys for leaders and INV codes for managers, managed through an admin panel.
+- **Alerting System:** Critical, operational, financial, and emergency alerts to notify the team of important events.
+- **Audit Logging:** Detailed logging of all user actions with categorization and severity levels for accountability and security.
+- **Session Management:** Secure import, encryption, and binding of Telegram sessions to specific projects.
+- **Evidence Export:** Tools to export OSINT findings into structured JSON and HTML reports.
+- **Security Center:** A dedicated module for user blocking, FSM state resets, and security monitoring.
+- **Referral System:** Mechanism for generating unique referral links, tracking referrals, and awarding bonuses.
+- **Ticket System:** Allows unregistered users to create support tickets and communicate with administrators.
 
-## 🔄 Основні процеси
-
-### 1️⃣ Реєстрація й заявка
-- Гість вибирає тариф
-- Заповнює FSM форму
-- Надсилає заявку адміну
-
-### 2️⃣ Обробка заявки адміном
-- Адмін отримує повідомлення
-- Обирає шаблон або пише своє
-- Надсилає реквізити
-
-### 3️⃣ Авторизація
-- Користувач вводить ключ доступу
-- Система перевіряє ключ
-- Створюється проект
-
-### 4️⃣ Робочий простір
-- Лідер управляє командою
-- Додає ботів та менеджерів
-- Створює кампанії розсилок
-
-## 🗄️ База даних
-
-### Таблиці
-- **users**: Користувачі системи
-- **applications**: Заявки на підписку
-- **keys**: Ключі доступу
-- **projects**: Проекти лідерів
-- **managers**: Менеджери проектів
-- **campaigns**: Кампанії розсилок
-- **bots**: Боти в системі
-- **logs**: Логування дій
-
-## 🔐 Безпека
-
-- Унікальні ключі доступу (SHADOW-XXXX-XXXX)
-- Прив'язка до Telegram ID
-- Ізоляція проектів
-- Логування всіх дій
-- Rate limiting та захист від спаму
-
-## 🚀 Запуск
-
-1. Встановіть залежності:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. Налаштуйте змінні оточення в `.env`
-
-3. Запустіть бота:
-   ```bash
-   python main.py
-   ```
-
-## 📊 Логіка системи
-
-### FSM Стани (заявка)
-1. Вибір терміну (2/14/30 днів)
-2. Введення імені
-3. Опис мети використання
-4. Контактна інформація
-5. Підтвердження
-
-### Адмін-панель
-- 📝 Шаблони відповідей
-- ✏️ Ручна відповідь
-- ❌ Відхилення з причиною
-- 🔑 Генерація ключів
-- 📊 Статистика та звіти
-
-## 🎯 Статус розробки
-- [x] Базова структура проекту
-- [x] Моделі БД
-- [x] Конфігурація та налаштування
-- [x] Основні обробники
-- [x] Клавіатури та меню
-- [x] FSM заявок
-- [x] Адмін-панель
-- [x] OSINT модуль з геосканування та аналіз чатів
-- [x] Аналітика та AI Sentiment
-- [x] Botnet управління
-- [x] Система платежів (Telegram Stars, Liqpay, Карта)
-- [x] Команда менеджерів
-- [x] Текстові воронки та шаблони
-
-## 📅 Останні зміни (2025-12-26)
-- Виправлено підключення до PostgreSQL бази даних
-- Додано підтримку asyncpg для асинхронних запитів
-- Виправлено імпорт конфігурації BOT_TOKEN
-- Додано функції botnet_description, osint_description, texting_description
-- Виправлено всі обробники callback кнопок головного меню
-- **Впроваджено повну систему ролей з різними меню:**
-  - Guest (Гість) - базове меню з заявками та тарифами
-  - Manager (Менеджер) - кампанії, боти, аналітика
-  - Leader (Лідер) - повний доступ до проекту
-  - Admin (Адміністратор) - управління всією системою
-- Додано RoleMiddleware для автоматичної перевірки ролей
-- Створено keyboards/role_menus.py з меню для кожної ролі
-- Створено services/user_service.py для управління ролями
-- Команда /setrole для зміни ролей (тільки адмін)
-- Автоматичне підвищення до admin для ID з ADMIN_IDS
-
-### OSINT Модулі (2025-12-26)
-- **TelegramAnalyzer** - аналіз каналів, користувачів, пошук повідомлень
-- **DNSWhoisAnalyzer** - WHOIS, DNS записи, SSL сертифікати, геолокація IP
-- **ImageAnalyzer** - EXIF дані, GPS координати, хеші, детекція облич
-- **SocialMediaOSINT** - Reddit, GitHub, HackerNews, перевірка username
-- **OSINTAggregator** - комплексний аналіз доменів, IP, Telegram
-
-### Campaign Manager
-- Створення та управління кампаніями розсилок
-- Типи: broadcast, targeted, drip, sequential
-- Статуси: draft, scheduled, running, paused, completed
-- Статистика: відправлено, помилки, прогрес
-
-### Scheduler
-- Планування задач: once, interval, daily
-- Автоматичне виконання за розкладом
-- Управління активними задачами
-
-### Audit Logger (2025-12-26)
-- Логування всіх дій користувачів
-- Категорії: auth, campaign, osint, botnet, team, payment, system, security
-- Рівні важливості: info, warning, critical
-- Генерація звітів по користувачам
-
-### Intelligence Alerts (2025-12-26)
-- 🚨 Критичні: спроби зламу, падіння БД, помилки шифрування
-- ⚠️ Оперативні: перевищення лімітів, блокування ботів, OSINT результати
-- 🎫 Фінансові: нові заявки на оплату, створення ключів
-- 🆘 Екстрені: миттєве сповіщення всієї команди
-
-### Encryption Manager (2025-12-26)
-- Шифрування session_string для ботів
-- HMAC підпис для верифікації цілісності
-- Генерація безпечних ліцензійних ключів (SHADOW-XXXX-XXXX)
-- Hash функції для перевірки даних
-
-### Session Manager (2025-12-26)
-- ZIP імпорт сесій (Telethon/Pyrogram)
-- Валідація форматів .session та .json
-- Шифрування всіх сесій перед збереженням
-- Прив'язка сесій до project_id
-
-### Evidence Exporter (2025-12-26)
-- Збереження доказів OSINT в JSON
-- Генерація HTML звітів
-- Deep Chat Analysis з виявленням підозрілих патернів
-- Криптографічні хеші для верифікації
-
-### Emergency Router (2025-12-26)
-- /emergency - екстрений контроль системи
-- Зупинка всіх кампаній
-- Деактивація ботнету
-- Блокування менеджерів
-- Повна зупинка системи
-
-### Applications Router (2025-12-26)
-- Повний FSM процес заявки
-- Листування Visitor-Admin
-- Надсилання реквізитів
-- Генерація ліцензійних ключів
-- Сповіщення в адмін-кишеню
-
-### CMS Configurator (2025-12-26)
-- /config - динамічна зміна кнопок через адмін-панель
-- Редагування текстів привітань для кожної ролі
-- Система банерів з можливістю додавання/приховування
-- Збереження конфігурації в cms_config.json
-- Видимість кнопок для різних ролей
-
-### Security Center (2025-12-26)
-- /security - центр безпеки з статистикою
-- Миттєве блокування користувачів (is_blocked = True)
-- Кік з примусовим скиданням FSM стану
-- Вимога нового ліцензійного ключа після кіку
-- SecurityMiddleware для перевірки на кожному запиті
-- Фіксація причини та юридичної підстави в AuditLog
-- Security Monitor з останніми подіями безпеки
-
-### Ticket System (2025-12-26)
-- /support - створення тікетів незареєстрованими
-- Листування Visitor-Admin через бота
-- Адмін-кишеня - сповіщення всім ADMIN_IDS
-- Статуси тікетів: open/closed
-- Відповіді адміна надходять користувачу в особисті
-
-### Referral System (2025-12-26)
-- /referral - генерація унікального посилання
-- Відстеження parent_leader_id для менеджерів
-- Бонуси: 10% від першої оплати, 5% від наступних
-- Досягнення за кількість рефералів (+3/7/15/30 днів)
-- Статистика переходів та конверсії
-
-### Manual Payment Confirmation (2025-12-26)
-- БЕЗ автоматичного поповнення балансу
-- Кнопка "Оплату отримано" - єдиний тригер видачі ключа
-- Надсилання скріншота квитанції адмінам
-- Генерація SHADOW-XXXX-XXXX ключа після підтвердження
-- Відхилення з логуванням в AuditLog
-
-## 📝 Примітки для розробників
-
-- Використовується aiogram 3.3 для Telegram бота
-- SQLAlchemy для роботи з БД
-- FSM для управління станами діалогу
-- Middleware для аутентифікації та логування
-
-## 🤝 Контрибюцій та оновлення
-
-Система активно розвивається. Основні этапи:
-1. Завершення FSM та заявок
-2. Реалізація адмін-панелі
-3. Додавання OSINT інструментів
-4. Розробка аналітичних звітів
-5. Оптимізація та тестування
+## External Dependencies
+- **Telegram Bot API:** Interacted with via `aiogram 3.3` for all bot functionalities.
+- **PostgreSQL:** Used as the primary database for storing system data, managed through `SQLAlchemy` and `asyncpg`.
+- **Telethon/Pyrogram:** Session formats supported for importing Telegram bot sessions.
+- **Payment Gateways (Manual Confirmation):** The system supports manual confirmation of payments, implying integration with various payment methods (Telegram Stars, Liqpay, Card) without direct API automation for balance top-ups.
