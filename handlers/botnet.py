@@ -224,7 +224,7 @@ async def bot_settings(query: CallbackQuery):
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔒 SOCKS5", callback_data="proxy_socks5")], [InlineKeyboardButton(text="🌐 HTTP", callback_data="proxy_http")], [InlineKeyboardButton(text="◀️ Назад", callback_data="add_bots")]])
     await query.message.answer("⚙️ <b>НАЛАШТУВАННЯ БОТІВ</b>\n\nТип проксі: SOCKS5 (рекомендовано)\nІнтервал: 10-30 сек\nПрогрів: Автоматичний (72 ч)", reply_markup=kb, parse_mode="HTML")
 
-@botnet_router.callback_query(F.data == "proxy_socks5" | F.data == "proxy_http")
+@botnet_router.callback_query(F.data.in_(["proxy_socks5", "proxy_http"]))
 async def proxy_type(query: CallbackQuery):
     await query.answer("✅ Тип обрано!")
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="◀️ Назад", callback_data="bot_settings")]])
