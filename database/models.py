@@ -4,12 +4,23 @@ from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
 
+class UserRole:
+    GUEST = "guest"
+    LEADER = "leader"
+    MANAGER = "manager"
+    ADMIN = "admin"
+
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
     telegram_id = Column(String, unique=True)
     username = Column(String)
     first_name = Column(String)
+    role = Column(String, default=UserRole.GUEST)
+    project_id = Column(Integer, nullable=True)
+    balance = Column(Float, default=0.0)
+    subscription_type = Column(String, nullable=True)
+    subscription_expires = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.now)
 
