@@ -1,7 +1,8 @@
 import logging
 from typing import Optional, List
 from sqlmodel import Session, select, func
-from database.models import User, UserRole, LicensePlan
+from database.models import User
+from core.role_constants import UserRole
 from .base import BaseRepository
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ class UserRepository(BaseRepository[User]):
         """Get user by Telegram ID"""
         try:
             statement = select(User).where(User.telegram_id == telegram_id)
-            result = await self.session.exec(statement)
+            result = self.session.exec(statement)
             return result.first()
         except Exception as e:
             logger.error(f"Error getting user by telegram_id {telegram_id}: {e}")
@@ -27,7 +28,7 @@ class UserRepository(BaseRepository[User]):
         """Get user by username"""
         try:
             statement = select(User).where(User.username == username)
-            result = await self.session.exec(statement)
+            result = self.session.exec(statement)
             return result.first()
         except Exception as e:
             logger.error(f"Error getting user by username {username}: {e}")
@@ -37,7 +38,7 @@ class UserRepository(BaseRepository[User]):
         """Get total number of users"""
         try:
             statement = select(func.count(User.id))
-            result = await self.session.exec(statement)
+            result = self.session.exec(statement)
             return result.scalar_one_or_none() or 0
         except Exception as e:
             logger.error(f"Error counting total users: {e}")
@@ -47,7 +48,7 @@ class UserRepository(BaseRepository[User]):
         """Get users by role"""
         try:
             statement = select(User).where(User.role == role).offset(skip).limit(limit)
-            result = await self.session.exec(statement)
+            result = self.session.exec(statement)
             return result.all()
         except Exception as e:
             logger.error(f"Error getting users by role {role}: {e}")
