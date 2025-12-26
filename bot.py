@@ -28,6 +28,11 @@ try:
     from handlers.texting import texting_router
     from handlers.applications import applications_router
     from handlers.emergency import emergency_router
+    from handlers.configurator import configurator_router
+    from handlers.security import security_router
+    from handlers.tickets import tickets_router
+    from handlers.referral import referral_router
+    from middlewares.security_middleware import SecurityMiddleware
     from utils.db import init_db
     from middlewares.role_middleware import RoleMiddleware
     from keyboards.role_menus import get_menu_by_role, get_description_by_role
@@ -41,6 +46,8 @@ bot = Bot(token=BOT_TOKEN or "PLACEHOLDER")
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
+dp.message.middleware(SecurityMiddleware())
+dp.callback_query.middleware(SecurityMiddleware())
 dp.message.middleware(RoleMiddleware())
 dp.callback_query.middleware(RoleMiddleware())
 
@@ -48,7 +55,8 @@ routers = [
     user_router, admin_router, payments_router, botnet_router,
     osint_router, analytics_router, team_router, subscriptions_router,
     funnels_router, help_router, texting_router, applications_router,
-    emergency_router
+    emergency_router, configurator_router, security_router, 
+    tickets_router, referral_router
 ]
 
 for r in routers:
