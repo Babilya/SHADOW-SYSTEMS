@@ -21,6 +21,14 @@ from handlers.analytics import router as analytics_router
 from handlers.configurator import router as config_router
 from handlers.help import router as help_router
 from handlers.funnels import funnels_router
+from handlers.warming import warming_router
+from handlers.mailing import mailing_router
+from handlers.geoscanner import geo_router
+from handlers.proxy import proxy_router
+from handlers.advanced_features import advanced_router
+from handlers.osint_handler import osint_router as osint_handler_router
+from handlers.texting import texting_router
+from handlers.scheduler import scheduler_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -51,6 +59,14 @@ async def main():
     dp.include_router(config_router)
     dp.include_router(help_router)
     dp.include_router(funnels_router)
+    dp.include_router(warming_router)
+    dp.include_router(mailing_router)
+    dp.include_router(geo_router)
+    dp.include_router(proxy_router)
+    dp.include_router(advanced_router)
+    dp.include_router(osint_handler_router)
+    dp.include_router(texting_router)
+    dp.include_router(scheduler_router)
 
     from utils.db import init_db
     await init_db()

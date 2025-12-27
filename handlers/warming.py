@@ -81,9 +81,41 @@ class WarmingCRUD:
                 "completed": completed.scalar() or 0
             }
 
+WARMING_PROFILES = {
+    "conservative": {
+        "name": "🟢 Консервативний",
+        "actions_per_day": 20,
+        "interval_min": 120,
+        "interval_max": 300,
+        "description": "Безпечний режим: ~20 дій/день"
+    },
+    "standard": {
+        "name": "🟡 Стандартний",
+        "actions_per_day": 50,
+        "interval_min": 60,
+        "interval_max": 180,
+        "description": "Рекомендований: ~50 дій/день"
+    },
+    "aggressive": {
+        "name": "🔴 Агресивний",
+        "actions_per_day": 100,
+        "interval_min": 30,
+        "interval_max": 90,
+        "description": "Ризикований: 100+ дій/день"
+    },
+    "custom": {
+        "name": "⚙️ Кастомний",
+        "actions_per_day": 0,
+        "interval_min": 0,
+        "interval_max": 0,
+        "description": "Налаштування вручну"
+    }
+}
+
 def warming_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔥 Запустити прогрів", callback_data="start_warming")],
+        [InlineKeyboardButton(text="📋 Профілі прогріву", callback_data="warming_profiles")],
         [InlineKeyboardButton(text="📊 Активні прогріви", callback_data="active_warmings")],
         [InlineKeyboardButton(text="📈 Статистика", callback_data="warming_stats")],
         [InlineKeyboardButton(text="⚙️ Налаштування", callback_data="warming_settings")],
@@ -436,6 +468,88 @@ async def warming_stats(query: CallbackQuery):
     ])
     
     await query.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+
+@warming_router.callback_query(F.data == "warming_profiles")
+async def warming_profiles(query: CallbackQuery):
+    await query.answer()
+    
+    text = """<b>📋 ПРОФІЛІ ПРОГРІВУ</b>
+
+<b>🟢 Консервативний</b>
+├ ~20 дій/день
+├ Інтервал: 2-5 хвилин
+└ Статус: Безпечний
+
+<b>🟡 Стандартний</b> (Рекомендовано)
+├ ~50 дій/день
+├ Інтервал: 1-3 хвилини
+└ Статус: Оптимальний
+
+<b>🔴 Агресивний</b>
+├ 100+ дій/день
+├ Інтервал: 30-90 секунд
+└ Статус: Ризикований
+
+<b>⚙️ Кастомний</b>
+└ Налаштування вручну"""
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🟢 Консервативний", callback_data="profile_conservative")],
+        [InlineKeyboardButton(text="🟡 Стандартний", callback_data="profile_standard")],
+        [InlineKeyboardButton(text="🔴 Агресивний", callback_data="profile_aggressive")],
+        [InlineKeyboardButton(text="⚙️ Кастомний", callback_data="profile_custom")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="warming_menu")]
+    ])
+    
+    await query.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+
+@warming_router.callback_query(F.data.startswith("profile_"))
+async def set_warming_profile(query: CallbackQuery, state: FSMContext):
+    profile_key = query.data.replace("profile_", "")
+    profile = WARMING_PROFILES.get(profile_key)
+    
+    if profile:
+        await state.update_data(warming_profile=profile_key)
+        
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Підтвердити", callback_data="confirm_profile")],
+            [InlineKeyboardButton(text="◀️ Назад", callback_data="warming_profiles")]
+        ])
+        
+        await query.message.edit_text(
+            f"""<b>✅ ПРОФІЛЬ ОБРАНО</b>
+
+{profile['name']}
+{profile['description']}
+
+<b>Параметри:</b>
+├ Дій на день: {profile['actions_per_day']}
+├ Мін. інтервал: {profile['interval_min']} сек
+└ Макс. інтервал: {profile['interval_max']} сек
+
+Натисніть "Підтвердити" для застосування.""",
+            reply_markup=kb, parse_mode="HTML"
+        )
+    
+    await query.answer()
+
+@warming_router.callback_query(F.data == "confirm_profile")
+async def confirm_profile(query: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    profile_key = data.get("warming_profile", "standard")
+    
+    await query.answer(f"✅ Профіль '{profile_key}' застосовано!", show_alert=True)
+    await state.clear()
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔥 Запустити прогрів", callback_data="start_warming")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="warming_menu")]
+    ])
+    
+    await query.message.edit_text(
+        f"<b>✅ ПРОФІЛЬ ЗАСТОСОВАНО</b>\n\nПрофіль: {WARMING_PROFILES[profile_key]['name']}\n\nТепер ви можете запустити прогрів з цими налаштуваннями.",
+        reply_markup=kb, parse_mode="HTML"
+    )
 
 @warming_router.callback_query(F.data == "warming_settings")
 async def warming_settings(query: CallbackQuery):
