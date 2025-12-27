@@ -12,7 +12,7 @@ from handlers.start import router as start_router
 from handlers.auth_system import router as auth_router
 from handlers.subscriptions import router as subs_router
 from handlers.tickets import router as tickets_router
-from handlers.admin import router as admin_router
+from handlers.admin import admin_router
 from handlers.osint import router as osint_router
 from handlers.botnet import router as botnet_router
 from handlers.campaigns_handler import router as campaigns_router

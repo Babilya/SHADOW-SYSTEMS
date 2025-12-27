@@ -22,7 +22,12 @@ class EncryptionManager:
     """AES-256-CBC шифрування з HKDF деривацією ключів згідно ТЗ"""
     
     def __init__(self, master_key: str = None):
-        self.master_key = master_key or os.getenv('ENCRYPTION_MASTER_KEY') or os.getenv('ENCRYPTION_SECRET', 'shadow_system_master_key_2025')
+        self.master_key = master_key or os.getenv('ENCRYPTION_MASTER_KEY') or os.getenv('ENCRYPTION_SECRET') or os.getenv('SESSION_SECRET')
+        if not self.master_key:
+            logger.critical("CRITICAL: No ENCRYPTION_MASTER_KEY, ENCRYPTION_SECRET, or SESSION_SECRET found in environment!")
+            logger.critical("Please set one of these environment variables to enable encryption.")
+            logger.critical("Using fallback key for development ONLY - DO NOT USE IN PRODUCTION!")
+            self.master_key = "dev_fallback_key_change_in_production"
         self._backend = default_backend() if CRYPTO_AVAILABLE else None
         
         if CRYPTO_AVAILABLE:
