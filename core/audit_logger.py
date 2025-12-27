@@ -120,10 +120,10 @@ class AuditLogger:
     
     async def _save_to_db(self, entry: AuditEntry):
         try:
-            from database.db import async_session
+            from database.db import engine
             from sqlalchemy import text
-            async with async_session() as session:
-                await session.execute(
+            with engine.connect() as conn:
+                conn.execute(
                     text("""
                         INSERT INTO audit_logs 
                         (user_id, action, category, severity, details, ip_address, action_type, actor_id, payload, created_at)
@@ -142,7 +142,7 @@ class AuditLogger:
                         "created_at": entry.timestamp
                     }
                 )
-                await session.commit()
+                conn.commit()
         except Exception as e:
             logger.error(f"Failed to save audit log to DB: {e}")
     

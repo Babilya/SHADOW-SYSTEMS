@@ -212,6 +212,9 @@ class AuditLog(Base):
     severity = Column(String, default="info")
     details = Column(Text)
     ip_address = Column(String, nullable=True)
+    action_type = Column(String, nullable=True)
+    actor_id = Column(Integer, nullable=True)
+    payload = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
 
 class CMSConfig(Base):
