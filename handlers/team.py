@@ -90,14 +90,20 @@ class TeamStates(StatesGroup):
 
 def team_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="👥 Менеджери", callback_data="list_managers"),
-         InlineKeyboardButton(text="➕ Додати", callback_data="add_manager")],
-        [InlineKeyboardButton(text="🔑 Згенерувати INVITE", callback_data="generate_invite")],
-        [InlineKeyboardButton(text="⭐ Рейтинг", callback_data="manager_rating"),
-         InlineKeyboardButton(text="📊 Активність", callback_data="team_activity")],
-        [InlineKeyboardButton(text="⚙️ Налаштування прав", callback_data="team_permissions")],
-        [InlineKeyboardButton(text="📈 Статистика проекту", callback_data="project_stats")],
-        [InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_menu")]
+        [
+            InlineKeyboardButton(text="👥 МЕНЕДЖЕРИ", callback_data="list_managers"),
+            InlineKeyboardButton(text="➕ ДОДАТИ", callback_data="add_manager")
+        ],
+        [InlineKeyboardButton(text="🔑 ЗГЕНЕРУВАТИ INVITE", callback_data="generate_invite")],
+        [
+            InlineKeyboardButton(text="⭐ РЕЙТИНГ", callback_data="manager_rating"),
+            InlineKeyboardButton(text="📊 АКТИВНІСТЬ", callback_data="team_activity")
+        ],
+        [
+            InlineKeyboardButton(text="⚙️ ПРАВА", callback_data="team_permissions"),
+            InlineKeyboardButton(text="📈 СТАТИСТИКА", callback_data="project_stats")
+        ],
+        [InlineKeyboardButton(text="◀️ НАЗАД", callback_data="user_menu")]
     ])
 
 def team_description() -> str:

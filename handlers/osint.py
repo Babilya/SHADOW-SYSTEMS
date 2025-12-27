@@ -20,24 +20,22 @@ class OSINTStates(StatesGroup):
 def osint_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="🌐 DNS Lookup", callback_data="osint_dns"),
+            InlineKeyboardButton(text="🌐 DNS LOOKUP", callback_data="osint_dns"),
             InlineKeyboardButton(text="📋 WHOIS", callback_data="osint_whois")
         ],
         [
-            InlineKeyboardButton(text="🌍 IP Геолокація", callback_data="osint_geoip"),
-            InlineKeyboardButton(text="📧 Email Verify", callback_data="osint_email")
+            InlineKeyboardButton(text="🌍 IP GEOLOCATION", callback_data="osint_geoip"),
+            InlineKeyboardButton(text="📧 EMAIL VERIFY", callback_data="osint_email")
         ],
         [
-            InlineKeyboardButton(text="👤 Telegram User", callback_data="user_analysis"),
-            InlineKeyboardButton(text="💬 Chat Parsing", callback_data="chat_analysis")
+            InlineKeyboardButton(text="👤 USER ANALYSIS", callback_data="user_analysis"),
+            InlineKeyboardButton(text="💬 CHAT PARSING", callback_data="chat_analysis")
         ],
         [
-            InlineKeyboardButton(text="📥 Експорт", callback_data="export_contacts"),
-            InlineKeyboardButton(text="📈 Статистика", callback_data="osint_stats")
+            InlineKeyboardButton(text="📥 ЕКСПОРТ ДАНИХ", callback_data="export_contacts"),
+            InlineKeyboardButton(text="📈 СТАТИСТИКА", callback_data="osint_stats")
         ],
-        [
-            InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_menu")
-        ],
+        [InlineKeyboardButton(text="◀️ НАЗАД", callback_data="user_menu")]
     ])
 
 def osint_description() -> str:

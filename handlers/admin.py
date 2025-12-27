@@ -56,15 +56,8 @@ async def admin_panel(message: Message):
 @admin_router.callback_query(F.data == "admin_menu")
 async def admin_menu_callback(query: CallbackQuery):
     await query.answer()
-    text = """<b>🛡️ ПАНЕЛЬ АДМІНІСТРАТОРА</b>
-<i>Центр управління системою</i>
-
-━━━━━━━━━━━━━━━━━━━━━━━
-
-<b>👑 Рівень доступу:</b> ROOT/ADMIN
-
-<b>🛠️ Оберіть розділ для управління:</b>"""
-    await query.message.edit_text(text, reply_markup=admin_main_kb(), parse_mode="HTML")
+    from keyboards.role_menus import admin_description, admin_menu
+    await query.message.edit_text(admin_description(), reply_markup=admin_menu(), parse_mode="HTML")
 
 @admin_router.callback_query(F.data == "admin_block")
 async def admin_block(query: CallbackQuery, state: FSMContext):

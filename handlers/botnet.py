@@ -18,18 +18,16 @@ class BotnetStates(StatesGroup):
 
 def botnet_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="➕ ДОДАТИ БОТІВ", callback_data="add_bots")],
         [
-            InlineKeyboardButton(text="➕ Додати ботів", callback_data="add_bots"),
-            InlineKeyboardButton(text="📋 Мої боти", callback_data="list_bots")
+            InlineKeyboardButton(text="📋 МОЇ БОТИ", callback_data="list_bots"),
+            InlineKeyboardButton(text="🔄 РОТАЦІЯ ПРОКСІ", callback_data="proxy_rotation")
         ],
         [
-            InlineKeyboardButton(text="🔄 Ротація проксі", callback_data="proxy_rotation"),
-            InlineKeyboardButton(text="🔥 Прогрів", callback_data="warm_bots")
+            InlineKeyboardButton(text="🔥 ЦИКЛ ПРОГРІВУ", callback_data="warm_bots"),
+            InlineKeyboardButton(text="📊 СТАТИСТИКА", callback_data="bots_stats")
         ],
-        [
-            InlineKeyboardButton(text="📊 Статистика", callback_data="bots_stats"),
-            InlineKeyboardButton(text="◀️ Повернутись", callback_data="back_to_menu")
-        ]
+        [InlineKeyboardButton(text="◀️ ПОВЕРНУТИСЬ", callback_data="user_menu")]
     ])
 
 def botnet_description(total=0, active=0, pending=0, errors=0) -> str:
