@@ -14,19 +14,17 @@ class AnalyticsStates(StatesGroup):
 
 def analytics_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📈 ЗВІТИ", callback_data="reports")],
         [
-            InlineKeyboardButton(text="📈 Звіти", callback_data="reports"),
-            InlineKeyboardButton(text="📊 Дашборд", callback_data="dashboard")
+            InlineKeyboardButton(text="📊 ДАШБОРД", callback_data="dashboard"),
+            InlineKeyboardButton(text="😊 AI SENTIMENT", callback_data="sentiment")
         ],
         [
-            InlineKeyboardButton(text="😊 AI Sentiment", callback_data="sentiment"),
-            InlineKeyboardButton(text="⚠️ Ризики", callback_data="risk_predict")
+            InlineKeyboardButton(text="⚠️ РИЗИКИ", callback_data="risk_predict"),
+            InlineKeyboardButton(text="⏰ НАЙКРАЩИЙ ЧАС", callback_data="best_time")
         ],
-        [
-            InlineKeyboardButton(text="⏰ Найкращий час", callback_data="best_time"),
-            InlineKeyboardButton(text="✍️ AI Тексти", callback_data="generate_text")
-        ],
-        [InlineKeyboardButton(text="◀️ Повернутись", callback_data="back_to_menu")]
+        [InlineKeyboardButton(text="✍️ AI ГЕНЕРАЦІЯ ТЕКСТІВ", callback_data="generate_text")],
+        [InlineKeyboardButton(text="◀️ НАЗАД", callback_data="user_menu")]
     ])
 
 def analytics_description() -> str:
