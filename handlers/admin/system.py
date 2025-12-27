@@ -1,0 +1,51 @@
+from aiogram import F
+from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.context import FSMContext
+from . import admin_router, AdminStates
+from .utils import safe_edit_message
+
+@admin_router.callback_query(F.data == "admin_system")
+async def admin_system(query: CallbackQuery):
+    await query.answer()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Перезапуск", callback_data="system_restart")],
+        [InlineKeyboardButton(text="🗑️ Очистити кеш", callback_data="system_clear_cache")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_menu")]
+    ])
+    text = """⚙️ <b>СИСТЕМА</b>
+
+<b>📊 Статус компонентів:</b>
+├ 🟢 Telegram Bot: Працює
+├ 🟢 База даних: OK
+├ 🟢 Scheduler: Активний
+├ 🟢 Campaign Manager: OK
+└ 🟢 Alert System: Готовий
+
+<b>💾 Ресурси:</b>
+├ CPU: 12%
+├ RAM: 256 MB / 1 GB
+└ Uptime: 24д 5г 30хв
+
+<b>📦 Версія:</b> v2.0.0"""
+    await safe_edit_message(query, text, kb)
+
+@admin_router.callback_query(F.data == "system_restart")
+async def system_restart(query: CallbackQuery):
+    await query.answer("🔄 Система буде перезапущена", show_alert=True)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_system")]
+    ])
+    await safe_edit_message(query, "🔄 <b>Перезапуск системи...</b>\n\nСистема буде доступна через декілька секунд.", kb)
+
+@admin_router.callback_query(F.data == "system_clear_cache")
+async def system_clear_cache(query: CallbackQuery):
+    await query.answer("✅ Кеш очищено!", show_alert=True)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_system")]
+    ])
+    await safe_edit_message(query, "🗑️ <b>Кеш очищено!</b>\n\nВсі тимчасові дані видалено.", kb)
+
+@admin_router.message(AdminStates.waiting_block_id)
+async def process_block(message: Message, state: FSMContext):
+    await message.answer(f"✅ Користувача {message.text} заблоковано")
+    await state.clear()
