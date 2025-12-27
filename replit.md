@@ -136,3 +136,44 @@ All feature routers now properly registered in main.py:
 
 ## AI Integration Notes
 AI features require OpenAI API key. When key is missing, system operates in graceful degradation mode - all non-AI features remain fully functional.
+
+## ТЗ Compliance (December 2025)
+
+### Security & Encryption
+- **EncryptionManager**: AES-256-CBC + HKDF key derivation (core/encryption.py)
+- Separate keys for sessions, proxies, data
+- Fallback XOR encryption when cryptography unavailable
+
+### Session Management
+- **SessionValidator**: Full validation with 5 tests (core/session_validator.py)
+  - Connection test
+  - Authorization test
+  - Rate limit test
+  - Privacy test
+  - Functionality test
+- Supports: Telethon .session, Pyrogram JSON, TData archives, StringSession
+
+### BotSession Model (Extended)
+20+ fields including:
+- Device fingerprint, anti-detect profile
+- Proxy configuration (type, config JSON)
+- Warming phase & profile tracking
+- Flood wait timestamps
+- Success rate & message statistics
+- Tags for filtering
+
+### Campaign Manager (Advanced)
+- **AdvancedCampaignManager**: Worker pool with async queues (core/advanced_campaign_manager.py)
+- Weighted round-robin bot selection
+- Adaptive delay calculation based on success rate
+- Real-time statistics with lock-safe updates
+- A/B testing support
+- Dynamic delay adjustment
+
+### OSINT Engine (Extended)
+- **AdvancedOSINTEngine**: Deep analysis system (core/advanced_osint_engine.py)
+- Network graph building with influence scores
+- Threat assessment with risk scoring
+- Pattern detection (phones, crypto wallets, coordinates, emails)
+- Suspicious keyword detection (UK/RU/EN)
+- Evidence storage with hash verification
