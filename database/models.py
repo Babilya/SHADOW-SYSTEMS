@@ -106,13 +106,82 @@ class Bot(Base):
     status = Column(String, default="active")
     created_at = Column(DateTime, default=datetime.now)
 
+class BotSessionStatus:
+    """Статуси бот-сесій"""
+    ACTIVE = "active"
+    PAUSED = "paused"
+    FLOODED = "flooded"
+    BANNED = "banned"
+    DEAD = "dead"
+    TESTING = "testing"
+
 class BotSession(Base):
+    """Розширена модель бот-сесії згідно ТЗ"""
     __tablename__ = "bot_sessions"
+    
     id = Column(Integer, primary_key=True)
-    bot_id = Column(Integer)
-    session_data = Column(Text)
+    bot_id = Column(Integer, nullable=True)
+    
+    phone = Column(String(20), nullable=True, index=True)
+    session_string = Column(Text, nullable=True)
+    session_data = Column(Text, nullable=True)
+    api_id = Column(Integer, nullable=True)
+    api_hash = Column(String(100), nullable=True)
+    
+    owner_id = Column(Integer, nullable=True)
+    project_id = Column(Integer, nullable=True)
+    tags = Column(Text, default="[]")
+    
+    status = Column(String(20), default=BotSessionStatus.ACTIVE)
+    last_active = Column(DateTime, default=datetime.now)
+    messages_sent = Column(Integer, default=0)
+    messages_failed = Column(Integer, default=0)
+    success_rate = Column(Float, default=100.0)
+    flood_wait_until = Column(DateTime, nullable=True)
+    
+    device_fingerprint = Column(Text, default="{}")
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(Text, nullable=True)
+    app_version = Column(String(50), nullable=True)
+    
+    proxy_id = Column(Integer, nullable=True)
+    proxy_type = Column(String(20), nullable=True)
+    proxy_config = Column(Text, default="{}")
+    
+    anti_detect_profile = Column(Text, default="{}")
+    fingerprint_hash = Column(String(64), nullable=True)
+    
+    warming_phase = Column(Integer, default=0)
+    warming_started_at = Column(DateTime, nullable=True)
+    warming_profile = Column(String(20), default="standard")
+    
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.now)
+    
+    def is_available(self) -> bool:
+        """Перевірка доступності бота"""
+        if self.status in [BotSessionStatus.BANNED, BotSessionStatus.DEAD]:
+            return False
+        
+        if self.flood_wait_until and datetime.now() < self.flood_wait_until:
+            return False
+        
+        if self.success_rate < 30.0:
+            return False
+            
+        return self.is_active
+    
+    def update_statistics(self, success: bool):
+        """Оновлення статистики"""
+        self.messages_sent += 1
+        if not success:
+            self.messages_failed += 1
+        
+        total = self.messages_sent
+        if total > 0:
+            self.success_rate = ((total - self.messages_failed) / total) * 100
+        
+        self.last_active = datetime.now()
 
 class Ticket(Base):
     __tablename__ = "tickets"
