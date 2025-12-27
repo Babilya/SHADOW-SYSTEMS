@@ -43,3 +43,41 @@ from core.ai_service import (
     ai_service,
     AIService
 )
+from core.advanced_parser import (
+    advanced_parser,
+    AdvancedTelegramParser,
+    initialize_parsers_with_client
+)
+from core.realtime_parser import (
+    realtime_parser,
+    RealTimeParser,
+    initialize_realtime_with_client
+)
+from core.botnet_manager import (
+    botnet_manager,
+    BotnetManager
+)
+from core.antidetect import (
+    antidetect_system,
+    AntiDetectSystem
+)
+from core.recovery_system import (
+    recovery_system,
+    RecoverySystem
+)
+from core.session_importer import (
+    session_importer,
+    SessionImporter
+)
+from core.advanced_osint_engine import (
+    advanced_osint_engine,
+    AdvancedOSINTEngine
+)
+from core.rapid_osint import (
+    rapid_osint,
+    RapidOSINTParser
+)
+from core.realtime_monitor import (
+    realtime_monitor,
+    RealTimeMonitor
+)

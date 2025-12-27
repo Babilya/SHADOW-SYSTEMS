@@ -34,6 +34,14 @@ from handlers.support_handler import support_router
 from handlers.notifications_handler import notifications_router
 from handlers.missing_handlers import missing_router
 from handlers.advanced_tools import advanced_tools_router
+from handlers.applications import applications_router
+from handlers.bots_handler import bots_router
+from handlers.emergency import emergency_router
+from handlers.export import export_router
+from handlers.referral import referral_router
+from handlers.user import user_router
+from handlers.users_handler import users_router
+from handlers.admin_notifications import router as admin_notifications_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -76,6 +84,14 @@ async def main():
     dp.include_router(support_router)
     dp.include_router(notifications_router)
     dp.include_router(advanced_tools_router)
+    dp.include_router(applications_router)
+    dp.include_router(bots_router)
+    dp.include_router(emergency_router)
+    dp.include_router(export_router)
+    dp.include_router(referral_router)
+    dp.include_router(user_router)
+    dp.include_router(users_router)
+    dp.include_router(admin_notifications_router)
     dp.include_router(missing_router)
 
     from utils.db import init_db
