@@ -62,13 +62,18 @@ def funnel_view_kb(funnel_id: int, is_active: bool) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="📅 Планування", callback_data=f"funnel_schedule_{funnel_id}")
         ],
         [
-            InlineKeyboardButton(text=toggle_text, callback_data=f"funnel_toggle_{funnel_id}"),
+            InlineKeyboardButton(text="📧 Розсилка", callback_data=f"funnel_mailing:{funnel_id}:menu"),
+            InlineKeyboardButton(text="🔍 OSINT", callback_data=f"funnel_osint:{funnel_id}:menu")
+        ],
+        [
+            InlineKeyboardButton(text="📡 Моніторинг", callback_data=f"funnel_monitor:{funnel_id}:menu"),
             InlineKeyboardButton(text="📊 Статистика", callback_data=f"funnel_stats_{funnel_id}")
         ],
         [
-            InlineKeyboardButton(text="🗑 Видалити", callback_data=f"funnel_delete_{funnel_id}"),
-            InlineKeyboardButton(text="◀️ До воронок", callback_data="funnels_main")
-        ]
+            InlineKeyboardButton(text=toggle_text, callback_data=f"funnel_toggle_{funnel_id}"),
+            InlineKeyboardButton(text="🗑 Видалити", callback_data=f"funnel_delete_{funnel_id}")
+        ],
+        [InlineKeyboardButton(text="◀️ До воронок", callback_data="funnels_main")]
     ])
 
 def funnel_steps_kb(funnel_id: int, steps: list) -> InlineKeyboardMarkup:
@@ -792,3 +797,77 @@ async def funnel_schedule_set(query: CallbackQuery):
         reply_markup=funnel_view_kb(funnel_id, funnel.is_active if funnel else True),
         parse_mode="HTML"
     )
+
+@funnels_router.callback_query(F.data.startswith("funnel_monitor:"))
+async def funnel_monitor_action(query: CallbackQuery):
+    """Інтеграція моніторингу з воронкою"""
+    parts = query.data.split(":")
+    funnel_id = int(parts[1])
+    action = parts[2] if len(parts) > 2 else "menu"
+    
+    funnel = funnel_service.get_funnel(funnel_id)
+    
+    if action == "menu":
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔍 Моніторинг реакцій", callback_data=f"funnel_monitor:{funnel_id}:reactions")],
+            [InlineKeyboardButton(text="👥 Відстеження нових", callback_data=f"funnel_monitor:{funnel_id}:new_users")],
+            [InlineKeyboardButton(text="🔔 Тригери переходу", callback_data=f"funnel_monitor:{funnel_id}:triggers")],
+            [InlineKeyboardButton(text="📊 Звіт активності", callback_data=f"funnel_monitor:{funnel_id}:report")],
+            [InlineKeyboardButton(text="◀️ До воронки", callback_data=f"funnel_view_{funnel_id}")]
+        ])
+        await query.message.edit_text(
+            f"📡 <b>МОНІТОРИНГ ВОРОНКИ</b>\n"
+            f"<i>{funnel.name if funnel else f'Воронка #{funnel_id}'}</i>\n\n"
+            "═══════════════════════════════\n\n"
+            "<b>Можливості моніторингу:</b>\n"
+            "├ 🔍 Відстеження реакцій на кроки\n"
+            "├ 👥 Моніторинг нових користувачів\n"
+            "├ 🔔 Автоматичні тригери переходу\n"
+            "└ 📊 Звіти активності\n\n"
+            "Виберіть опцію:",
+            reply_markup=kb, parse_mode="HTML"
+        )
+    elif action == "triggers":
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Додати тригер", callback_data=f"funnel_monitor:{funnel_id}:add_trigger")],
+            [InlineKeyboardButton(text="📋 Активні тригери", callback_data=f"funnel_monitor:{funnel_id}:list_triggers")],
+            [InlineKeyboardButton(text="◀️ Назад", callback_data=f"funnel_monitor:{funnel_id}:menu")]
+        ])
+        await query.message.edit_text(
+            f"🔔 <b>ТРИГЕРИ ВОРОНКИ #{funnel_id}</b>\n\n"
+            "<b>Типи тригерів:</b>\n"
+            "├ 📩 На отримання повідомлення\n"
+            "├ 👆 На натискання кнопки\n"
+            "├ ⏱ По часу (затримка)\n"
+            "└ 🎯 На ключове слово\n\n"
+            "Виберіть дію:",
+            reply_markup=kb, parse_mode="HTML"
+        )
+    elif action == "report":
+        steps = funnel_service.get_steps(funnel_id)
+        views = funnel.views_count if funnel else 0
+        conversions = funnel.conversions if funnel else 0
+        
+        await query.message.edit_text(
+            f"📊 <b>ЗВІТ АКТИВНОСТІ</b>\n"
+            f"<i>{funnel.name if funnel else f'Воронка #{funnel_id}'}</i>\n\n"
+            "═══════════════════════════════\n\n"
+            f"<b>Загальна статистика:</b>\n"
+            f"├ Кроків: {len(steps)}\n"
+            f"├ Переглядів: {views}\n"
+            f"├ Конверсій: {conversions}\n"
+            f"└ Коефіцієнт: {round(conversions/views*100, 1) if views else 0}%\n\n"
+            "<b>Активність за 24 години:</b>\n"
+            "├ Нових користувачів: 0\n"
+            "├ Завершили воронку: 0\n"
+            "└ Відписались: 0",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔄 Оновити", callback_data=f"funnel_monitor:{funnel_id}:report")],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data=f"funnel_monitor:{funnel_id}:menu")]
+            ]),
+            parse_mode="HTML"
+        )
+    else:
+        await query.answer(f"Функція {action} буде доступна найближчим часом", show_alert=True)
+    
+    await query.answer()

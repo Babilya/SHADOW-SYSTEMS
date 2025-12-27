@@ -410,3 +410,174 @@ async def mailing_cancel(query: CallbackQuery, state: FSMContext):
     await state.clear()
     await query.message.edit_text("❌ Створення розсилки скасовано")
     await query.answer()
+
+@mailing_router.callback_query(F.data == "campaigns_main")
+async def campaigns_main(query: CallbackQuery):
+    """Головне меню кампаній"""
+    await query.answer()
+    stats = mailing_engine.get_stats()
+    
+    text = f"""<b>📢 ЦЕНТР КАМПАНІЙ</b>
+<i>Управління рекламними та інформаційними кампаніями</i>
+
+━━━━━━━━━━━━━━━━━━━━━━━
+
+<b>📊 СТАТИСТИКА:</b>
+├ 🔄 Активних кампаній: <code>{stats['active_tasks']}</code>
+├ 📨 Відправлено: <code>{stats['total_sent']}</code>
+├ ❌ Помилок: <code>{stats['total_failed']}</code>
+└ 🤖 Сесій: <code>{stats['sessions_available']}</code>
+
+━━━━━━━━━━━━━━━━━━━━━━━
+
+<b>МОЖЛИВОСТІ:</b>
+├ 📧 Масова розсилка
+├ 🎯 Таргетовані кампанії
+├ 📅 Заплановані відправки
+└ 📊 Детальна аналітика"""
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📧 Розсилка", callback_data="mailing_menu")],
+        [InlineKeyboardButton(text="🔍 Моніторинг", callback_data="monitor_menu")],
+        [
+            InlineKeyboardButton(text="📋 Активні", callback_data="mailing_active"),
+            InlineKeyboardButton(text="📊 Статистика", callback_data="mailing_stats")
+        ],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_menu")]
+    ])
+    
+    await query.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+
+@mailing_router.callback_query(F.data == "mailing_settings")
+async def mailing_settings(query: CallbackQuery):
+    """Налаштування розсилок"""
+    await query.answer()
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⏱ Інтервали", callback_data="settings_intervals")],
+        [InlineKeyboardButton(text="🔄 Ретрай логіка", callback_data="settings_retry")],
+        [InlineKeyboardButton(text="🛡️ Антифлуд", callback_data="settings_antiflood")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="mailing_menu")]
+    ])
+    
+    await query.message.edit_text(
+        "<b>⚙️ НАЛАШТУВАННЯ РОЗСИЛКИ</b>\n\n"
+        "Виберіть параметр для налаштування:",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@mailing_router.callback_query(F.data.startswith("settings_"))
+async def settings_handler(query: CallbackQuery):
+    setting = query.data.replace("settings_", "")
+    await query.answer(f"Налаштування {setting} буде доступне найближчим часом")
+
+@mailing_router.callback_query(F.data == "monitor_start")
+async def monitor_start(query: CallbackQuery):
+    """Запуск моніторингу"""
+    result = await monitoring_engine.start()
+    if result.get("success"):
+        await query.answer("✅ Моніторинг запущено")
+    else:
+        await query.answer(f"❌ {result.get('error', 'Помилка')}")
+    await monitor_menu(query)
+
+@mailing_router.callback_query(F.data == "monitor_stop")
+async def monitor_stop_handler(query: CallbackQuery):
+    """Зупинка моніторингу"""
+    result = await monitoring_engine.stop()
+    if result.get("success"):
+        await query.answer("⏹ Моніторинг зупинено")
+    else:
+        await query.answer(f"❌ {result.get('error', 'Помилка')}")
+    await monitor_menu(query)
+
+@mailing_router.callback_query(F.data == "monitor_chats")
+async def monitor_chats(query: CallbackQuery):
+    """Список груп під моніторингом"""
+    chats = monitoring_engine.get_chats()
+    
+    if not chats:
+        text = "<b>📡 ГРУПИ ПІД МОНІТОРИНГОМ</b>\n\nНемає груп. Додайте через /monitor_add @group"
+    else:
+        text = "<b>📡 ГРУПИ ПІД МОНІТОРИНГОМ</b>\n\n"
+        for chat in chats[:10]:
+            text += f"├ {chat.get('title', chat.get('id'))}\n"
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="monitor_menu")]
+    ])
+    
+    await query.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    await query.answer()
+
+@mailing_router.callback_query(F.data.startswith("funnel_mailing:"))
+async def funnel_mailing_action(query: CallbackQuery, state: FSMContext):
+    """Інтеграція розсилки з воронкою"""
+    parts = query.data.split(":")
+    funnel_id = int(parts[1])
+    action = parts[2] if len(parts) > 2 else "menu"
+    
+    if action == "menu":
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📧 Розіслати крок", callback_data=f"funnel_mailing:{funnel_id}:send_step")],
+            [InlineKeyboardButton(text="📅 Запланувати", callback_data=f"funnel_mailing:{funnel_id}:schedule")],
+            [InlineKeyboardButton(text="🎯 Таргетинг", callback_data=f"funnel_mailing:{funnel_id}:targeting")],
+            [InlineKeyboardButton(text="◀️ До воронки", callback_data=f"funnel_view_{funnel_id}")]
+        ])
+        await query.message.edit_text(
+            f"📧 <b>РОЗСИЛКА ДЛЯ ВОРОНКИ #{funnel_id}</b>\n\n"
+            "Виберіть дію для інтеграції з розсилкою:",
+            reply_markup=kb, parse_mode="HTML"
+        )
+    elif action == "send_step":
+        from services.funnel_service import funnel_service
+        steps = funnel_service.get_steps(funnel_id)
+        
+        buttons = []
+        for step in steps[:8]:
+            buttons.append([InlineKeyboardButton(
+                text=f"📝 {step.step_order}. {step.title or step.content[:20]}...",
+                callback_data=f"send_funnel_step:{funnel_id}:{step.id}"
+            )])
+        buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data=f"funnel_mailing:{funnel_id}:menu")])
+        
+        await query.message.edit_text(
+            "📧 <b>ВИБІР КРОКУ ДЛЯ РОЗСИЛКИ</b>\n\n"
+            "Виберіть крок воронки для розсилки:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+            parse_mode="HTML"
+        )
+    else:
+        await query.answer(f"Функція {action} для воронки", show_alert=True)
+    await query.answer()
+
+@mailing_router.callback_query(F.data.startswith("send_funnel_step:"))
+async def send_funnel_step(query: CallbackQuery):
+    """Відправка кроку воронки через розсилку"""
+    parts = query.data.split(":")
+    funnel_id = int(parts[1])
+    step_id = int(parts[2])
+    
+    from services.funnel_service import funnel_service
+    from utils.db import SessionLocal
+    from database.models import FunnelStep
+    
+    db = SessionLocal()
+    try:
+        step = db.query(FunnelStep).filter(FunnelStep.id == step_id).first()
+        if step:
+            task_id = str(uuid.uuid4())[:8]
+            mailing_engine.create_task(
+                task_id=task_id,
+                project_id=query.from_user.id,
+                name=f"Воронка #{funnel_id} - Крок {step.step_order}",
+                message_template=step.content,
+                target_users=[],
+                interval_min=3,
+                interval_max=5
+            )
+            await query.answer(f"✅ Розсилка створена: {task_id}", show_alert=True)
+        else:
+            await query.answer("❌ Крок не знайдено", show_alert=True)
+    finally:
+        db.close()

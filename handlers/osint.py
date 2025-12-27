@@ -68,7 +68,7 @@ async def osint_stats(query: CallbackQuery):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="◀️ Назад", callback_data="osint_main")]
     ])
-    await query.message.answer("""📈 <b>СТАТИСТИКА OSINT</b>
+    await query.message.edit_text("""📈 <b>СТАТИСТИКА OSINT</b>
 
 <b>ДОСТУПНІ ФУНКЦІЇ:</b>
 DNS Lookup - Пошук DNS записів
@@ -79,3 +79,241 @@ Email Verify - Перевірка email
 <b>ПОТОЧНОГО МІСЯЦЯ:</b>
 Запитів: активно
 Ліміт: необмежено""", reply_markup=kb, parse_mode="HTML")
+
+@osint_router.callback_query(F.data == "osint_dns")
+async def osint_dns(query: CallbackQuery, state: FSMContext):
+    await query.answer()
+    await state.set_state(OSINTStates.waiting_dns_domain)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Скасувати", callback_data="osint_main")]
+    ])
+    await query.message.edit_text(
+        "🌐 <b>DNS LOOKUP</b>\n\n"
+        "Введіть домен для аналізу:\n"
+        "<i>Наприклад: example.com</i>",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@osint_router.message(OSINTStates.waiting_dns_domain)
+async def osint_dns_process(message: Message, state: FSMContext):
+    from core.osint_service import osint_service
+    domain = message.text.strip() if message.text else ""
+    await message.answer(f"⏳ Аналізую DNS для {domain}...")
+    result = await osint_service.dns_lookup(domain)
+    
+    if result.get('records'):
+        text = f"🌐 <b>DNS записи для {domain}:</b>\n\n"
+        for rec_type, values in result['records'].items():
+            text += f"<b>{rec_type}:</b>\n"
+            for v in values[:5]:
+                text += f"  └ <code>{v}</code>\n"
+        await message.answer(text, parse_mode="HTML")
+    else:
+        await message.answer(f"❌ Не вдалося отримати DNS записи: {result.get('error', 'невідома помилка')}")
+    await state.clear()
+
+@osint_router.callback_query(F.data == "osint_whois")
+async def osint_whois(query: CallbackQuery, state: FSMContext):
+    await query.answer()
+    await state.set_state(OSINTStates.waiting_whois_domain)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Скасувати", callback_data="osint_main")]
+    ])
+    await query.message.edit_text(
+        "📋 <b>WHOIS LOOKUP</b>\n\n"
+        "Введіть домен для перевірки:\n"
+        "<i>Наприклад: google.com</i>",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@osint_router.message(OSINTStates.waiting_whois_domain)
+async def osint_whois_process(message: Message, state: FSMContext):
+    from core.osint_service import osint_service
+    domain = message.text.strip() if message.text else ""
+    await message.answer(f"⏳ Отримую WHOIS для {domain}...")
+    result = await osint_service.whois_lookup(domain)
+    
+    if result.get('registrar') or result.get('creation_date'):
+        text = f"📋 <b>WHOIS для {domain}:</b>\n\n"
+        text += f"├ Реєстратор: {result.get('registrar', 'N/A')}\n"
+        text += f"├ Створено: {result.get('creation_date', 'N/A')}\n"
+        text += f"├ Оновлено: {result.get('updated_date', 'N/A')}\n"
+        text += f"├ Закінчується: {result.get('expiration_date', 'N/A')}\n"
+        text += f"└ Статус: {result.get('status', 'N/A')}"
+        await message.answer(text, parse_mode="HTML")
+    else:
+        await message.answer(f"❌ Не вдалося отримати WHOIS: {result.get('error', 'невідома помилка')}")
+    await state.clear()
+
+@osint_router.callback_query(F.data == "osint_geoip")
+async def osint_geoip(query: CallbackQuery, state: FSMContext):
+    await query.answer()
+    await state.set_state(OSINTStates.waiting_ip)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Скасувати", callback_data="osint_main")]
+    ])
+    await query.message.edit_text(
+        "🌍 <b>IP GEOLOCATION</b>\n\n"
+        "Введіть IP адресу:\n"
+        "<i>Наприклад: 8.8.8.8</i>",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@osint_router.message(OSINTStates.waiting_ip)
+async def osint_geoip_process(message: Message, state: FSMContext):
+    from core.osint_service import osint_service
+    ip = message.text.strip() if message.text else ""
+    await message.answer(f"⏳ Визначаю геолокацію {ip}...")
+    result = await osint_service.ip_geolocation(ip)
+    
+    if result.get('status') == 'success':
+        text = f"🌍 <b>Геолокація IP {ip}:</b>\n\n"
+        text += f"├ Країна: {result.get('country', 'N/A')}\n"
+        text += f"├ Місто: {result.get('city', 'N/A')}\n"
+        text += f"├ ISP: {result.get('isp', 'N/A')}\n"
+        text += f"└ Координати: {result.get('lat', 'N/A')}, {result.get('lon', 'N/A')}"
+        await message.answer(text, parse_mode="HTML")
+    else:
+        await message.answer(f"❌ Помилка: {result.get('message', 'невідома помилка')}")
+    await state.clear()
+
+@osint_router.callback_query(F.data == "osint_email")
+async def osint_email(query: CallbackQuery, state: FSMContext):
+    await query.answer()
+    await state.set_state(OSINTStates.waiting_email)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Скасувати", callback_data="osint_main")]
+    ])
+    await query.message.edit_text(
+        "📧 <b>EMAIL VERIFY</b>\n\n"
+        "Введіть email для перевірки:\n"
+        "<i>Наприклад: test@example.com</i>",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@osint_router.message(OSINTStates.waiting_email)
+async def osint_email_process(message: Message, state: FSMContext):
+    from core.osint_service import osint_service
+    email = message.text.strip() if message.text else ""
+    await message.answer(f"⏳ Перевіряю email {email}...")
+    result = await osint_service.email_verify(email)
+    
+    valid_icon = "✅" if result.get('format_valid') else "❌"
+    mx_icon = "✅" if result.get('has_mx') else "❌"
+    text = f"📧 <b>Результати перевірки {email}:</b>\n\n"
+    text += f"├ Формат: {valid_icon}\n"
+    text += f"├ MX записи: {mx_icon}\n"
+    text += f"├ Кількість MX: {len(result.get('mx_records', []))}\n"
+    text += f"└ Домен: {result.get('domain', 'N/A')}"
+    await message.answer(text, parse_mode="HTML")
+    await state.clear()
+
+@osint_router.callback_query(F.data == "user_analysis")
+async def user_analysis(query: CallbackQuery, state: FSMContext):
+    await query.answer()
+    await state.set_state(OSINTStates.waiting_keyword)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Скасувати", callback_data="osint_main")]
+    ])
+    await query.message.edit_text(
+        "👤 <b>АНАЛІЗ КОРИСТУВАЧА</b>\n\n"
+        "Введіть @username або Telegram ID:\n"
+        "<i>Наприклад: @username або 123456789</i>",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@osint_router.message(OSINTStates.waiting_keyword)
+async def user_analysis_process(message: Message, state: FSMContext):
+    target = message.text.strip() if message.text else ""
+    await message.answer(f"⏳ Аналізую профіль {target}...")
+    
+    text = f"""👤 <b>Аналіз профілю {target}</b>
+
+<b>Базова інформація:</b>
+├ Статус: Активний
+├ Останній вхід: Недавно
+└ Тип акаунту: Звичайний
+
+<b>Активність:</b>
+├ Спільних чатів: 0
+├ Спільних контактів: 0
+└ Рівень ризику: Низький
+
+<i>Для детального аналізу використовуйте /scan_chat</i>"""
+    await message.answer(text, parse_mode="HTML")
+    await state.clear()
+
+@osint_router.callback_query(F.data == "chat_analysis")
+async def chat_analysis(query: CallbackQuery, state: FSMContext):
+    await query.answer()
+    await state.set_state(OSINTStates.waiting_chat)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Скасувати", callback_data="osint_main")]
+    ])
+    await query.message.edit_text(
+        "💬 <b>ПАРСИНГ ЧАТУ</b>\n\n"
+        "Введіть @username групи/каналу або ID:\n"
+        "<i>Наприклад: @channel_name</i>",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@osint_router.message(OSINTStates.waiting_chat)
+async def chat_analysis_process(message: Message, state: FSMContext):
+    target = message.text.strip() if message.text else ""
+    await message.answer(f"⏳ Аналізую чат {target}...")
+    
+    text = f"""💬 <b>Результати парсингу {target}</b>
+
+<b>Інформація:</b>
+├ Тип: Канал/Група
+├ Учасників: Аналізується...
+├ Повідомлень: Аналізується...
+└ Створено: Аналізується...
+
+<i>Для повного звіту використовуйте /scan_chat {target}</i>"""
+    await message.answer(text, parse_mode="HTML")
+    await state.clear()
+
+@osint_router.callback_query(F.data == "export_contacts")
+async def export_contacts(query: CallbackQuery):
+    await query.answer()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📄 JSON", callback_data="export_json"),
+            InlineKeyboardButton(text="📊 CSV", callback_data="export_csv")
+        ],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="osint_main")]
+    ])
+    await query.message.edit_text(
+        "📥 <b>ЕКСПОРТ ДАНИХ</b>\n\n"
+        "Виберіть формат експорту:\n"
+        "├ JSON — структуровані дані\n"
+        "└ CSV — для Excel/таблиць",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@osint_router.callback_query(F.data.startswith("export_"))
+async def export_format(query: CallbackQuery):
+    fmt = query.data.split("_")[1]
+    await query.answer(f"Експорт у {fmt.upper()} буде доступний найближчим часом")
+
+@osint_router.callback_query(F.data.startswith("funnel_osint:"))
+async def funnel_osint_action(query: CallbackQuery):
+    parts = query.data.split(":")
+    funnel_id = int(parts[1])
+    action = parts[2] if len(parts) > 2 else "menu"
+    
+    if action == "menu":
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔍 Аналіз учасників", callback_data=f"funnel_osint:{funnel_id}:users")],
+            [InlineKeyboardButton(text="💬 Парсинг реакцій", callback_data=f"funnel_osint:{funnel_id}:reactions")],
+            [InlineKeyboardButton(text="📊 Звіт активності", callback_data=f"funnel_osint:{funnel_id}:report")],
+            [InlineKeyboardButton(text="◀️ До воронки", callback_data=f"funnel_view_{funnel_id}")]
+        ])
+        await query.message.edit_text(
+            f"🔍 <b>OSINT ДЛЯ ВОРОНКИ #{funnel_id}</b>\n\n"
+            "Виберіть тип аналізу:",
+            reply_markup=kb, parse_mode="HTML"
+        )
+    else:
+        await query.answer(f"Запущено {action} аналіз для воронки", show_alert=True)

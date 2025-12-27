@@ -250,3 +250,45 @@ AI features require OpenAI API key. When key is missing, system operates in grac
 - Cooldown and priority settings
 - Violation tracking with evidence
 - Metrics recording and cleanup
+
+## Funnel Integration System
+
+### Воронки ↔ Шаблони
+- Вибір шаблону для воронки: `funnel_templates_{funnel_id}`
+- Застосування шаблону як нового кроку: `apply_tpl:{funnel_id}:{template_id}`
+- Створення шаблону з контексту воронки: `tpl_for_funnel:{funnel_id}`
+
+### Воронки ↔ Планування
+- ScheduledMailing model має `funnel_id` для прив'язки
+- Типи розкладу: interval (60/240 хв), daily (1440 хв), weekly (10080 хв)
+- Callback: `funnel_schedule_{funnel_id}`, `funnel_sched_set_{id}_{interval}`
+
+### Воронки ↔ Розсилки
+- Меню: `funnel_mailing:{funnel_id}:menu`
+- Вибір кроку для розсилки: `funnel_mailing:{funnel_id}:send_step`
+- Створення task з кроку воронки: `send_funnel_step:{funnel_id}:{step_id}`
+
+### Воронки ↔ OSINT
+- Меню: `funnel_osint:{funnel_id}:menu`
+- Аналіз учасників/реакцій/звітів
+- Інтеграція з osint_service (DNS, WHOIS, GeoIP, Email)
+
+### Воронки ↔ Моніторинг
+- Меню: `funnel_monitor:{funnel_id}:menu`
+- Моніторинг реакцій, нових користувачів
+- Тригери переходу: message/button/time/keyword
+- Звіти активності з конверсіями
+
+### OSINT Callback Handlers
+- `osint_dns` → DNS Lookup з FSM
+- `osint_whois` → WHOIS Lookup
+- `osint_geoip` → IP Geolocation
+- `osint_email` → Email Verify
+- `user_analysis` → Аналіз профілю
+- `chat_analysis` → Парсинг чату
+- `export_contacts` → Експорт JSON/CSV
+
+### Campaigns Handler
+- `campaigns_main` → Центр кампаній з статистикою
+- Інтеграція з mailing_engine
+- Моніторинг груп через monitoring_engine
